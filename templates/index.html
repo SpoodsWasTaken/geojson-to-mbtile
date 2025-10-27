@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoJSON to MBTiles Converter</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container { 
+            background: white;
+            border-radius: 12px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 600px;
+            width: 100%;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label { 
+            display: block;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        input[type="text"],
+        input[type="password"],
+        input[type="file"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        input[type="text"]:focus,
+        input[type="password"]:focus,
+        input[type="file"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        input[type="submit"] {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        input[type="submit"]:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+        input[type="submit"]:active {
+            transform: translateY(0);
+        }
+        .help-text {
+            font-size: 12px;
+            color: #888;
+            margin-top: 5px;
+        }
+        .divider {
+            height: 1px;
+            background: #e0e0e0;
+            margin: 30px 0;
+        }
+        .option-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .option-header {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+        #loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗺️ GeoJSON to MBTiles</h1>
+        <p class="subtitle">Convert a ZIP of GeoJSON files into a single MBTiles file. Optionally upload directly to your Mapbox account.</p>
+        
+        <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="file">GeoJSON ZIP File *</label>
+                <input type="file" name="file" id="file" accept=".zip" required>
+                <div class="help-text">Select a .zip file containing your .geojson files</div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="option-section">
+                <div class="option-header">📤 Mapbox Upload (Optional)</div>
+                <p class="help-text" style="margin-bottom: 15px;">Leave these fields empty to download the MBTiles file instead.</p>
+                
+                <div class="form-group">
+                    <label for="mapbox_token">Mapbox Secret Token</label>
+                    <input type="password" name="mapbox_token" id="mapbox_token" placeholder="sk.xxxx...">
+                    <div class="help-text">Your Mapbox secret access token with uploads:write scope</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="mapbox_username">Mapbox Username</label>
+                    <input type="text" name="mapbox_username" id="mapbox_username" placeholder="your-username">
+                </div>
+
+                <div class="form-group">
+                    <label for="tileset_name">Tileset Name</label>
+                    <input type="text" name="tileset_name" id="tileset_name" placeholder="my-awesome-tileset">
+                    <div class="help-text">A friendly name for your new tileset</div>
+                </div>
+            </div>
+
+            <input type="submit" value="Convert & Process">
+        </form>
+
+        <div id="loading">
+            <div class="spinner"></div>
+            <p>Processing your files... This may take a few minutes.</p>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', function() {
+            document.getElementById('uploadForm').style.display = 'none';
+            document.getElementById('loading').style.display = 'block';
+        });
+    </script>
+</body>
+</html>
+
