@@ -121,9 +121,13 @@ def upload_and_process():
                         'tippecanoe',
                         '-o', layer_mbtiles_path,
                         '-l', layer_type,
+                        '-Z10',  # Minimum zoom level
+                        '-z16',  # Maximum zoom level
                         '--force',
+                        '--no-feature-limit',
+                        '--no-tile-size-limit',
+                        '--preserve-input-order',
                         '--drop-densest-as-needed',
-                        '--extend-zooms-if-still-dropping',
                         str(geojson_file)
                     ]
                     
@@ -150,9 +154,13 @@ def upload_and_process():
                             'tippecanoe',
                             '-o', temp_individual_path,
                             '-l', layer_type,  # Same layer name for all
+                            '-Z10',  # Minimum zoom level
+                            '-z16',  # Maximum zoom level
                             '--force',
+                            '--no-feature-limit',
+                            '--no-tile-size-limit',
+                            '--preserve-input-order',
                             '--drop-densest-as-needed',
-                            '--extend-zooms-if-still-dropping',
                             str(geojson_file)
                         ]
                         

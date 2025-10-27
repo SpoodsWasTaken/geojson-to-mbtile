@@ -25,6 +25,7 @@
             --border: 0 0% 14.9%;
             --input: 0 0% 14.9%;
             --ring: 0 0% 83.1%;
+            --success: 142 76% 36%;
         }
 
         * {
@@ -161,7 +162,8 @@
             font-size: 0.875rem;
         }
 
-        input[type="submit"] {
+        input[type="submit"],
+        .button {
             width: 100%;
             padding: 0.625rem 1rem;
             background-color: hsl(var(--primary));
@@ -172,14 +174,28 @@
             font-weight: 500;
             cursor: pointer;
             transition: all 0.2s;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
         }
 
-        input[type="submit"]:hover {
+        input[type="submit"]:hover,
+        .button:hover {
             background-color: hsl(var(--primary) / 0.9);
         }
 
-        input[type="submit"]:active {
+        input[type="submit"]:active,
+        .button:active {
             transform: scale(0.98);
+        }
+
+        .button-secondary {
+            background-color: hsl(var(--secondary));
+            color: hsl(var(--secondary-foreground));
+        }
+
+        .button-secondary:hover {
+            background-color: hsl(var(--secondary) / 0.8);
         }
 
         .help-text {
@@ -244,67 +260,154 @@
             color: hsl(var(--muted-foreground));
             font-size: 0.875rem;
         }
+
+        #success {
+            display: none;
+            text-align: center;
+            padding: 2rem 0;
+        }
+
+        .success-icon {
+            width: 4rem;
+            height: 4rem;
+            margin: 0 auto 1.5rem;
+            border-radius: 50%;
+            background-color: hsl(var(--success) / 0.1);
+            border: 2px solid hsl(var(--success));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            color: hsl(var(--success));
+        }
+
+        .success-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: hsl(var(--foreground));
+        }
+
+        .success-message {
+            color: hsl(var(--muted-foreground));
+            margin-bottom: 1.5rem;
+            font-size: 0.875rem;
+        }
+
+        .success-details {
+            background-color: hsl(var(--muted) / 0.3);
+            padding: 1rem;
+            border-radius: 0.375rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid hsl(var(--border));
+            text-align: left;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            font-size: 0.875rem;
+            border-bottom: 1px solid hsl(var(--border));
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .detail-label {
+            color: hsl(var(--muted-foreground));
+        }
+
+        .detail-value {
+            color: hsl(var(--foreground));
+            font-weight: 500;
+        }
+
+        .mapbox-link {
+            color: hsl(var(--primary));
+            text-decoration: none;
+            word-break: break-all;
+        }
+
+        .mapbox-link:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>GeoJSON to MBTiles</h1>
-        <p class="subtitle">Convert GeoJSON files to MBTiles with smart layer grouping. Download locally or update your Mapbox tileset.</p>
-        
-        <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data">
-            <div class="form-group">
-                <label for="file">GeoJSON ZIP File</label>
-                <input type="file" name="file" id="file" accept=".zip" required>
-                <div class="help-text">Select a .zip file containing your .geojson files (named as [id]-[type].geojson or [id]_[type].geojson)</div>
-            </div>
+        <div id="form_container">
+            <h1>GeoJSON to MBTiles</h1>
+            <p class="subtitle">Convert GeoJSON files to MBTiles with smart layer grouping. Download locally or update your Mapbox tileset.</p>
+            
+            <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="file">GeoJSON ZIP File</label>
+                    <input type="file" name="file" id="file" accept=".zip" required>
+                    <div class="help-text">Select a .zip file containing your .geojson files (named as [id]-[type].geojson or [id]_[type].geojson)</div>
+                </div>
 
-            <div class="divider"></div>
+                <div class="divider"></div>
 
-            <div class="section">
-                <div class="section-header">Output Destination</div>
-                
-                <div class="radio-group">
-                    <label class="radio-option">
-                        <input type="radio" name="output_mode" value="download" id="mode_download" checked>
-                        <span class="radio-label">Download MBTiles file to my computer</span>
-                    </label>
+                <div class="section">
+                    <div class="section-header">Output Destination</div>
                     
-                    <label class="radio-option">
-                        <input type="radio" name="output_mode" value="mapbox" id="mode_mapbox">
-                        <span class="radio-label">Update Mapbox tileset</span>
-                    </label>
+                    <div class="radio-group">
+                        <label class="radio-option">
+                            <input type="radio" name="output_mode" value="download" id="mode_download" checked>
+                            <span class="radio-label">Download MBTiles file to my computer</span>
+                        </label>
+                        
+                        <label class="radio-option">
+                            <input type="radio" name="output_mode" value="mapbox" id="mode_mapbox">
+                            <span class="radio-label">Update Mapbox tileset</span>
+                        </label>
+                    </div>
+
+                    <div id="mapbox_fields" class="conditional-fields hidden">
+                        <div class="form-group">
+                            <label for="tileset_id">Mapbox Tileset ID</label>
+                            <input type="text" name="tileset_id" id="tileset_id" value="ericbutton.staging-9r4spd" placeholder="username.tileset-name">
+                            <div class="help-text">Format: username.tileset-name (saved for next time)</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="update_mode">Update Mode</label>
+                            <select name="update_mode" id="update_mode">
+                                <option value="append" selected>Append - Add new data to existing tileset (cumulative)</option>
+                                <option value="replace">Replace - Overwrite entire tileset with new data</option>
+                            </select>
+                            <div class="help-text">Append keeps existing features, Replace starts fresh</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="mapbox_token">Mapbox Access Token</label>
+                            <input type="password" name="mapbox_token" id="mapbox_token" placeholder="sk.xxxx...">
+                            <div class="help-text">Secret token with uploads:write and tilesets:write scopes</div>
+                        </div>
+                    </div>
                 </div>
 
-                <div id="mapbox_fields" class="conditional-fields hidden">
-                    <div class="form-group">
-                        <label for="tileset_id">Mapbox Tileset ID</label>
-                        <input type="text" name="tileset_id" id="tileset_id" value="ericbutton.staging-9r4spd" placeholder="username.tileset-name">
-                        <div class="help-text">Format: username.tileset-name (saved for next time)</div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="update_mode">Update Mode</label>
-                        <select name="update_mode" id="update_mode">
-                            <option value="append" selected>Append - Add new data to existing tileset (cumulative)</option>
-                            <option value="replace">Replace - Overwrite entire tileset with new data</option>
-                        </select>
-                        <div class="help-text">Append keeps existing features, Replace starts fresh</div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="mapbox_token">Mapbox Access Token</label>
-                        <input type="password" name="mapbox_token" id="mapbox_token" placeholder="sk.xxxx...">
-                        <div class="help-text">Secret token with uploads:write and tilesets:write scopes</div>
-                    </div>
-                </div>
-            </div>
-
-            <input type="submit" value="Convert & Process">
-        </form>
+                <input type="submit" value="Convert & Process">
+            </form>
+        </div>
 
         <div id="loading">
             <div class="spinner"></div>
             <p id="loading_message">Processing your files... This may take a few minutes.</p>
+        </div>
+
+        <div id="success">
+            <div class="success-icon">✓</div>
+            <h2 class="success-title">Conversion Complete</h2>
+            <p class="success-message" id="success_message">Your MBTiles file has been successfully created.</p>
+            
+            <div class="success-details" id="success_details">
+                <!-- Details will be populated by JavaScript -->
+            </div>
+
+            <button class="button button-secondary" onclick="resetForm()">Convert Another File</button>
         </div>
     </div>
 
@@ -339,7 +442,9 @@
         });
 
         // Form submission handling
-        document.getElementById('uploadForm').addEventListener('submit', function() {
+        document.getElementById('uploadForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
             const outputMode = document.querySelector('input[name="output_mode"]:checked').value;
             const loadingMessage = document.getElementById('loading_message');
             
@@ -354,9 +459,126 @@
                 loadingMessage.textContent = 'Processing your files... This may take a few minutes.';
             }
             
-            document.getElementById('uploadForm').style.display = 'none';
+            document.getElementById('form_container').style.display = 'none';
             document.getElementById('loading').style.display = 'block';
+
+            // Submit the form via fetch to handle response
+            const formData = new FormData(this);
+            
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (outputMode === 'download') {
+                    // For download mode, trigger file download
+                    return response.blob().then(blob => {
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'converted.mbtiles';
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        document.body.removeChild(a);
+                        
+                        showSuccess({
+                            mode: 'download',
+                            message: 'Your MBTiles file has been downloaded successfully.'
+                        });
+                    });
+                } else {
+                    // For Mapbox mode, parse JSON response
+                    return response.json().then(data => {
+                        if (data.success) {
+                            showSuccess({
+                                mode: 'mapbox',
+                                message: data.message,
+                                tileset_id: data.tileset_id,
+                                mapbox_url: data.mapbox_url,
+                                update_mode: data.mode
+                            });
+                        } else {
+                            alert('Error: ' + (data.error || 'Unknown error occurred'));
+                            resetForm();
+                        }
+                    });
+                }
+            })
+            .catch(error => {
+                alert('Error: ' + error.message);
+                resetForm();
+            });
         });
+
+        function showSuccess(data) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('success').style.display = 'block';
+            
+            const successMessage = document.getElementById('success_message');
+            const successDetails = document.getElementById('success_details');
+            
+            successMessage.textContent = data.message;
+            
+            let detailsHTML = '';
+            
+            if (data.mode === 'download') {
+                detailsHTML = `
+                    <div class="detail-row">
+                        <span class="detail-label">Output Mode</span>
+                        <span class="detail-value">Local Download</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Zoom Levels</span>
+                        <span class="detail-value">10-16</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Geometry</span>
+                        <span class="detail-value">Preserved</span>
+                    </div>
+                `;
+            } else if (data.mode === 'mapbox') {
+                detailsHTML = `
+                    <div class="detail-row">
+                        <span class="detail-label">Output Mode</span>
+                        <span class="detail-value">Mapbox Upload</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Update Mode</span>
+                        <span class="detail-value">${data.update_mode || 'N/A'}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Tileset ID</span>
+                        <span class="detail-value">${data.tileset_id}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Zoom Levels</span>
+                        <span class="detail-value">10-16</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Geometry</span>
+                        <span class="detail-value">Preserved</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Mapbox Studio</span>
+                        <span class="detail-value"><a href="${data.mapbox_url}" target="_blank" class="mapbox-link">View Tileset</a></span>
+                    </div>
+                `;
+            }
+            
+            successDetails.innerHTML = detailsHTML;
+        }
+
+        function resetForm() {
+            document.getElementById('success').style.display = 'none';
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('form_container').style.display = 'block';
+            document.getElementById('uploadForm').reset();
+            
+            // Reset Mapbox fields visibility
+            document.getElementById('mapbox_fields').classList.add('hidden');
+            document.getElementById('mapbox_token').required = false;
+        }
     </script>
 </body>
 </html>
