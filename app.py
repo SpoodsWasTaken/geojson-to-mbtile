@@ -7,14 +7,36 @@ import json
 import sqlite3
 from pathlib import Path
 from collections import defaultdict
-from flask import Flask, request, render_template, send_file, jsonify
+from flask import Flask, request, render_template, send_file, jsonify, session, redirect, url_for
 from mapbox import Uploader
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 app = Flask(__name__)
 
-# Configuration
+# Configuration from environment variables
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max file size
 ALLOWED_EXTENSIONS = {'zip'}
+
+# Authentication
+APP_PASSCODE = os.environ.get('PASSCODE', 'changeme')
+
+# Default tileset configuration
+DEFAULT_STAGING_TILESET = os.environ.get('DEFAULT_STAGING_TILESET', '')
+DEFAULT_PRODUCTION_TILESET = os.environ.get('DEFAULT_PRODUCTION_TILESET', '')
+
+def require_auth(f):
+    """Decorator to require authentication for protected routes."""
+    from functools import wraps
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('authenticated'):
+            return jsonify({'error': 'Authentication required', 'authenticated': False}), 401
+        return f(*args, **kwargs)
+    return decorated_function
 
 def allowed_file(filename):
     """Check if the uploaded file has an allowed extension."""
@@ -43,11 +65,38 @@ def get_mbtiles_layers(mbtiles_path):
 @app.route('/')
 def index():
     """Render the upload form."""
-    return render_template('index.html')
+    return render_template('index.html', 
+                         default_staging_tileset=DEFAULT_STAGING_TILESET,
+                         default_production_tileset=DEFAULT_PRODUCTION_TILESET)
+
+@app.route('/auth/check')
+def check_auth():
+    """Check if user is authenticated."""
+    return jsonify({'authenticated': session.get('authenticated', False)})
+
+@app.route('/auth/login', methods=['POST'])
+def login():
+    """Authenticate user with passcode."""
+    data = request.get_json()
+    passcode = data.get('passcode', '')
+    
+    if passcode == APP_PASSCODE:
+        session['authenticated'] = True
+        session.permanent = True  # Session lasts 24 hours
+        return jsonify({'success': True, 'message': 'Authentication successful'})
+    else:
+        return jsonify({'success': False, 'message': 'Invalid passcode'}), 401
+
+@app.route('/auth/logout', methods=['POST'])
+def logout():
+    """Logout user."""
+    session.pop('authenticated', None)
+    return jsonify({'success': True, 'message': 'Logged out successfully'})
 
 @app.route('/viewer')
+@require_auth
 def viewer():
-    """Render the map viewer."""
+    """Render the map viewer (requires authentication)."""
     tileset_id = request.args.get('tileset_id', 'ericbutton.staging-9r4spd')
     return render_template('viewer.html', tileset_id=tileset_id)
 
@@ -57,7 +106,7 @@ def health():
     return jsonify({"status": "healthy"}), 200
 
 @app.route('/upload', methods=['POST'])
-def upload_and_process():
+def upload():
     """
     Handle file upload, convert GeoJSON files to MBTiles, and optionally upload to Mapbox.
     """
@@ -82,6 +131,10 @@ def upload_and_process():
     
     # Validate Mapbox parameters if needed
     if output_mode == 'mapbox':
+        # Require authentication for Mapbox operations
+        if not session.get('authenticated'):
+            return jsonify({"error": "Authentication required for Mapbox operations"}), 401
+        
         if not mapbox_token:
             return jsonify({"error": "Mapbox access token is required for Mapbox upload"}), 400
         if not tileset_id:
