@@ -3,7 +3,10 @@ import subprocess
 import tempfile
 import zipfile
 import requests
+import json
+import sqlite3
 from pathlib import Path
+from collections import defaultdict
 from flask import Flask, request, render_template, send_file, jsonify
 from mapbox import Uploader
 
@@ -17,10 +20,36 @@ def allowed_file(filename):
     """Check if the uploaded file has an allowed extension."""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+def get_mbtiles_layers(mbtiles_path):
+    """Extract list of layer names from an MBTiles file."""
+    try:
+        conn = sqlite3.connect(mbtiles_path)
+        cursor = conn.cursor()
+        
+        # Get metadata JSON which contains layer information
+        cursor.execute("SELECT value FROM metadata WHERE name='json'")
+        result = cursor.fetchone()
+        conn.close()
+        
+        if result:
+            metadata = json.loads(result[0])
+            layers = [layer['id'] for layer in metadata.get('vector_layers', [])]
+            return layers
+        return []
+    except Exception as e:
+        print(f"Error reading MBTiles layers: {e}")
+        return []
+
 @app.route('/')
 def index():
     """Render the upload form."""
     return render_template('index.html')
+
+@app.route('/viewer')
+def viewer():
+    """Render the map viewer."""
+    tileset_id = request.args.get('tileset_id', 'ericbutton.staging-9r4spd')
+    return render_template('viewer.html', tileset_id=tileset_id)
 
 @app.route('/health')
 def health():
@@ -90,23 +119,22 @@ def upload_and_process():
                 }), 400
 
             # Step 2: Group GeoJSON files by type (suffix after dash or underscore)
-            # Example: e16-rwy.geojson, IGN-rwy.geojson, goo_rwy.geojson all go into 'rwy' layer
-            from collections import defaultdict
             files_by_type = defaultdict(list)
             
             for geojson_file in geojson_files:
-                filename = geojson_file.stem  # e.g., "e16-rwy", "IGN-rwy", or "goo_aim"
+                filename = geojson_file.stem
                 
                 # Extract the type (part after the last dash or underscore)
-                # Normalize by replacing underscores with dashes
                 if '-' in filename or '_' in filename:
                     normalized = filename.replace('_', '-')
-                    layer_type = normalized.split('-')[-1]  # e.g., "rwy", "aim"
+                    layer_type = normalized.split('-')[-1]
                 else:
-                    # If no separator, use the whole filename as the type
                     layer_type = filename
                 
                 files_by_type[layer_type].append(geojson_file)
+            
+            # Track which layers are in this upload
+            new_layers = list(files_by_type.keys())
             
             # Step 3: Process each type/layer
             layer_mbtiles_files = []
@@ -121,8 +149,8 @@ def upload_and_process():
                         'tippecanoe',
                         '-o', layer_mbtiles_path,
                         '-l', layer_type,
-                        '-Z10',  # Minimum zoom level
-                        '-z16',  # Maximum zoom level
+                        '-Z10',
+                        '-z16',
                         '--force',
                         '--no-feature-limit',
                         '--no-tile-size-limit',
@@ -141,7 +169,6 @@ def upload_and_process():
                     layer_mbtiles_files.append(layer_mbtiles_path)
                 else:
                     # Multiple files for this type - merge them into one layer
-                    # First, create individual MBTiles for each file
                     individual_mbtiles = []
                     
                     for idx, geojson_file in enumerate(files):
@@ -153,9 +180,9 @@ def upload_and_process():
                         command = [
                             'tippecanoe',
                             '-o', temp_individual_path,
-                            '-l', layer_type,  # Same layer name for all
-                            '-Z10',  # Minimum zoom level
-                            '-z16',  # Maximum zoom level
+                            '-l', layer_type,
+                            '-Z10',
+                            '-z16',
                             '--force',
                             '--no-feature-limit',
                             '--no-tile-size-limit',
@@ -193,11 +220,9 @@ def upload_and_process():
 
             # Step 4: Merge all layer MBTiles into final output
             if len(layer_mbtiles_files) == 1:
-                # If there's only one layer, just copy it
                 import shutil
                 shutil.copy(layer_mbtiles_files[0], output_mbtiles_path)
             else:
-                # Merge multiple layers into final MBTiles
                 final_join_command = [
                     'tile-join',
                     '-o', output_mbtiles_path,
@@ -213,7 +238,6 @@ def upload_and_process():
 
             # Step 5: Handle output based on mode
             if output_mode == 'download':
-                # Send the MBTiles file to the user for download
                 return send_file(
                     output_mbtiles_path,
                     as_attachment=True,
@@ -236,7 +260,8 @@ def upload_and_process():
                                 "message": "Tileset replaced successfully!",
                                 "tileset_id": tileset_id,
                                 "mapbox_url": f"https://studio.mapbox.com/tilesets/{tileset_id}/",
-                                "mode": "replace"
+                                "mode": "replace",
+                                "layers": new_layers
                             })
                         else:
                             return jsonify({
@@ -246,11 +271,11 @@ def upload_and_process():
                             }), 500
                     
                     elif update_mode == 'append':
-                        # APPEND mode: Download existing, merge, then upload
+                        # SMART APPEND mode: Exclude existing layers that match new layers, then merge
                         existing_mbtiles_path = os.path.join(work_dir, 'existing.mbtiles')
+                        filtered_mbtiles_path = os.path.join(work_dir, 'filtered.mbtiles')
                         merged_mbtiles_path = os.path.join(work_dir, 'merged.mbtiles')
                         
-                        # Download existing tileset from Mapbox
                         download_url = f"https://api.mapbox.com/tilesets/v1/{tileset_id}.mbtiles?access_token={mapbox_token}"
                         
                         try:
@@ -262,33 +287,75 @@ def upload_and_process():
                                     for chunk in download_resp.iter_content(chunk_size=8192):
                                         f.write(chunk)
                                 
-                                # Merge existing with new using tile-join
-                                merge_append_command = [
-                                    'tile-join',
-                                    '-o', merged_mbtiles_path,
-                                    '--force',
-                                    existing_mbtiles_path,
-                                    output_mbtiles_path
-                                ]
+                                # Get layers from existing tileset
+                                existing_layers = get_mbtiles_layers(existing_mbtiles_path)
+                                
+                                # Determine which layers to exclude (layers that exist in both)
+                                layers_to_exclude = [layer for layer in existing_layers if layer in new_layers]
+                                
+                                if layers_to_exclude:
+                                    # Filter existing tileset to exclude layers being replaced
+                                    filter_command = [
+                                        'tile-join',
+                                        '-o', filtered_mbtiles_path,
+                                        '--force'
+                                    ]
+                                    
+                                    # Add exclusion flags for each layer to replace
+                                    for layer in layers_to_exclude:
+                                        filter_command.extend(['-x', layer])
+                                    
+                                    filter_command.append(existing_mbtiles_path)
+                                    
+                                    subprocess.run(
+                                        filter_command,
+                                        check=True,
+                                        capture_output=True,
+                                        text=True
+                                    )
+                                    
+                                    # Merge filtered existing with new data
+                                    merge_command = [
+                                        'tile-join',
+                                        '-o', merged_mbtiles_path,
+                                        '--force',
+                                        filtered_mbtiles_path,
+                                        output_mbtiles_path
+                                    ]
+                                else:
+                                    # No overlapping layers, just merge directly
+                                    merge_command = [
+                                        'tile-join',
+                                        '-o', merged_mbtiles_path,
+                                        '--force',
+                                        existing_mbtiles_path,
+                                        output_mbtiles_path
+                                    ]
                                 
                                 subprocess.run(
-                                    merge_append_command,
+                                    merge_command,
                                     check=True,
                                     capture_output=True,
                                     text=True
                                 )
                                 
-                                # Upload merged tileset back to Mapbox
+                                # Upload merged tileset
                                 with open(merged_mbtiles_path, 'rb') as src:
                                     upload_resp = uploader.upload(src, tileset_id)
 
                                 if upload_resp.status_code in [200, 201]:
+                                    message = "Smart append complete!"
+                                    if layers_to_exclude:
+                                        message += f" Replaced layers: {', '.join(layers_to_exclude)}"
+                                    
                                     return jsonify({
                                         "success": True,
-                                        "message": "New data appended to tileset successfully!",
+                                        "message": message,
                                         "tileset_id": tileset_id,
                                         "mapbox_url": f"https://studio.mapbox.com/tilesets/{tileset_id}/",
-                                        "mode": "append"
+                                        "mode": "append (smart)",
+                                        "layers_updated": layers_to_exclude,
+                                        "layers_added": [l for l in new_layers if l not in layers_to_exclude]
                                     })
                                 else:
                                     return jsonify({
@@ -308,7 +375,8 @@ def upload_and_process():
                                         "message": "Tileset created successfully (first upload)!",
                                         "tileset_id": tileset_id,
                                         "mapbox_url": f"https://studio.mapbox.com/tilesets/{tileset_id}/",
-                                        "mode": "append (new tileset)"
+                                        "mode": "append (new tileset)",
+                                        "layers": new_layers
                                     })
                                 else:
                                     return jsonify({
@@ -351,7 +419,6 @@ def upload_and_process():
             }), 500
 
 if __name__ == '__main__':
-    # For local development
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port, debug=False)
 

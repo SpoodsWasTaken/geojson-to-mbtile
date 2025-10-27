@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tileset Viewer</title>
+    <script src='https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js'></script>
+    <link href='https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css' rel='stylesheet' />
+    <style>
+        :root {
+            --background: 0 0% 3.9%;
+            --foreground: 0 0% 98%;
+            --card: 0 0% 3.9%;
+            --border: 0 0% 14.9%;
+            --muted-foreground: 0 0% 63.9%;
+            --primary: 0 0% 98%;
+            --primary-foreground: 0 0% 9%;
+            --secondary: 0 0% 14.9%;
+            --secondary-foreground: 0 0% 98%;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+            background-color: hsl(var(--background));
+            color: hsl(var(--foreground));
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background-color: hsl(var(--card));
+            border-bottom: 1px solid hsl(var(--border));
+            padding: 1rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .header-subtitle {
+            font-size: 0.875rem;
+            color: hsl(var(--muted-foreground));
+            margin-top: 0.25rem;
+        }
+
+        .button {
+            padding: 0.5rem 1rem;
+            background-color: hsl(var(--secondary));
+            color: hsl(var(--secondary-foreground));
+            border: none;
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .button:hover {
+            background-color: hsl(var(--secondary) / 0.8);
+        }
+
+        .button-primary {
+            background-color: hsl(var(--primary));
+            color: hsl(var(--primary-foreground));
+        }
+
+        .button-primary:hover {
+            background-color: hsl(var(--primary) / 0.9);
+        }
+
+        .map-container {
+            flex: 1;
+            position: relative;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        .controls {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background-color: hsl(var(--card));
+            border: 1px solid hsl(var(--border));
+            border-radius: 0.5rem;
+            padding: 1rem;
+            max-width: 300px;
+            max-height: calc(100vh - 8rem);
+            overflow-y: auto;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+
+        .controls-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            color: hsl(var(--foreground));
+        }
+
+        .layer-toggle {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem;
+            margin-bottom: 0.5rem;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .layer-toggle:hover {
+            background-color: hsl(var(--secondary) / 0.5);
+        }
+
+        .layer-toggle input[type="checkbox"] {
+            width: 1rem;
+            height: 1rem;
+            margin-right: 0.5rem;
+            cursor: pointer;
+            accent-color: hsl(var(--primary));
+        }
+
+        .layer-toggle label {
+            flex: 1;
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+
+        .layer-color {
+            width: 1rem;
+            height: 1rem;
+            border-radius: 0.125rem;
+            margin-left: 0.5rem;
+        }
+
+        .info-box {
+            position: absolute;
+            bottom: 1rem;
+            left: 1rem;
+            background-color: hsl(var(--card));
+            border: 1px solid hsl(var(--border));
+            border-radius: 0.5rem;
+            padding: 0.75rem 1rem;
+            font-size: 0.75rem;
+            color: hsl(var(--muted-foreground));
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 1000;
+        }
+
+        .spinner {
+            border: 3px solid hsl(var(--border));
+            border-top: 3px solid hsl(var(--primary));
+            border-radius: 50%;
+            width: 2.5rem;
+            height: 2.5rem;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        /* Custom scrollbar for controls */
+        .controls::-webkit-scrollbar {
+            width: 0.5rem;
+        }
+
+        .controls::-webkit-scrollbar-track {
+            background: hsl(var(--background));
+            border-radius: 0.25rem;
+        }
+
+        .controls::-webkit-scrollbar-thumb {
+            background: hsl(var(--border));
+            border-radius: 0.25rem;
+        }
+
+        .controls::-webkit-scrollbar-thumb:hover {
+            background: hsl(var(--muted-foreground));
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <div class="header-title">Tileset Viewer</div>
+            <div class="header-subtitle" id="tileset-name">{{ tileset_id }}</div>
+        </div>
+        <div style="display: flex; gap: 0.5rem;">
+            <button class="button" onclick="resetPublicToken()" title="Change Mapbox public token">Reset Token</button>
+            <a href="/" class="button">Return to Main Menu</a>
+        </div>
+    </div>
+
+    <div class="map-container">
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p style="color: hsl(var(--muted-foreground)); font-size: 0.875rem;">Loading tileset...</p>
+        </div>
+
+        <div id="map"></div>
+
+        <div class="controls">
+            <div class="controls-title">Layers</div>
+            <div id="layer-list">
+                <!-- Layer toggles will be populated by JavaScript -->
+            </div>
+        </div>
+
+        <div class="info-box">
+            <div>Zoom: <span id="zoom-level">10</span></div>
+            <div>Center: <span id="center-coords">--, --</span></div>
+        </div>
+    </div>
+
+    <script>
+        // Get or prompt for Mapbox public token
+        let MAPBOX_PUBLIC_TOKEN = localStorage.getItem('mapbox_public_token');
+        const TILESET_ID = '{{ tileset_id }}';
+        
+        // Prompt for token if not saved
+        if (!MAPBOX_PUBLIC_TOKEN || MAPBOX_PUBLIC_TOKEN === 'YOUR_PUBLIC_TOKEN_HERE') {
+            MAPBOX_PUBLIC_TOKEN = prompt(
+                'Please enter your Mapbox public token (starts with pk.):\n\n' +
+                'You can find this at:\nhttps://account.mapbox.com/access-tokens/\n\n' +
+                'This will be saved for future use.'
+            );
+            
+            if (!MAPBOX_PUBLIC_TOKEN) {
+                alert('Public token is required to view the map. Redirecting to main menu.');
+                window.location.href = '/';
+            } else if (!MAPBOX_PUBLIC_TOKEN.startsWith('pk.')) {
+                alert('Invalid token format. Public tokens start with "pk."\nPlease try again.');
+                window.location.href = '/';
+            } else {
+                // Save the token
+                localStorage.setItem('mapbox_public_token', MAPBOX_PUBLIC_TOKEN);
+            }
+        }
+
+        // Initialize map
+        mapboxgl.accessToken = MAPBOX_PUBLIC_TOKEN;
+
+        const map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/mapbox/dark-v11',
+            center: [-95, 40], // Center of US
+            zoom: 4
+        });
+
+        // Layer colors for visualization
+        const layerColors = {
+            'rwy': '#3b82f6',      // Blue
+            'taxiway': '#10b981',  // Green
+            'twy': '#10b981',      // Green
+            'apron': '#8b5cf6',    // Purple
+            'pave': '#6b7280',     // Gray
+            'grass': '#22c55e',    // Light green
+            'threshold': '#f59e0b', // Orange
+            'aim': '#ef4444',      // Red
+            'arrow': '#eab308',    // Yellow
+            'num': '#ec4899',      // Pink
+            'chevron': '#06b6d4',  // Cyan
+            'rwcl': '#f97316',     // Orange
+            'rwyend': '#dc2626',   // Dark red
+            'small': '#a855f7',    // Purple
+            'emas': '#84cc16'      // Lime
+        };
+
+        const activeLayers = new Set();
+
+        // Add navigation controls
+        map.addControl(new mapboxgl.NavigationControl(), 'top-left');
+
+        // Update info box
+        function updateInfo() {
+            const zoom = map.getZoom().toFixed(2);
+            const center = map.getCenter();
+            document.getElementById('zoom-level').textContent = zoom;
+            document.getElementById('center-coords').textContent = 
+                `${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`;
+        }
+
+        map.on('load', () => {
+            document.getElementById('loading').classList.add('hidden');
+
+            // Add the tileset as a source
+            map.addSource('custom-tileset', {
+                type: 'vector',
+                url: `mapbox://${TILESET_ID}`
+            });
+
+            // Get tileset metadata to discover layers
+            fetch(`https://api.mapbox.com/v4/${TILESET_ID}.json?access_token=${MAPBOX_PUBLIC_TOKEN}`)
+                .then(response => response.json())
+                .then(data => {
+                    const layers = data.vector_layers || [];
+                    
+                    if (layers.length === 0) {
+                        document.getElementById('layer-list').innerHTML = 
+                            '<p style="color: hsl(var(--muted-foreground)); font-size: 0.75rem;">No layers found</p>';
+                        return;
+                    }
+
+                    // Create layer toggles
+                    const layerList = document.getElementById('layer-list');
+                    layerList.innerHTML = '';
+
+                    layers.forEach((layer, index) => {
+                        const layerId = layer.id;
+                        const color = layerColors[layerId] || '#ffffff';
+
+                        // Add layer to map
+                        addLayerToMap(layerId, color);
+                        activeLayers.add(layerId);
+
+                        // Create toggle
+                        const toggle = document.createElement('div');
+                        toggle.className = 'layer-toggle';
+                        toggle.innerHTML = `
+                            <input type="checkbox" id="layer-${layerId}" checked>
+                            <label for="layer-${layerId}">${layerId}</label>
+                            <div class="layer-color" style="background-color: ${color};"></div>
+                        `;
+
+                        toggle.querySelector('input').addEventListener('change', (e) => {
+                            toggleLayer(layerId, e.target.checked);
+                        });
+
+                        layerList.appendChild(toggle);
+                    });
+
+                    // Fit map to tileset bounds if available
+                    if (data.bounds) {
+                        map.fitBounds(data.bounds, { padding: 50 });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading tileset metadata:', error);
+                    document.getElementById('layer-list').innerHTML = 
+                        '<p style="color: #ef4444; font-size: 0.75rem;">Error loading layers</p>';
+                });
+
+            // Update info on move
+            map.on('move', updateInfo);
+            updateInfo();
+        });
+
+        function addLayerToMap(layerId, color) {
+            // Add fill layer for polygons
+            map.addLayer({
+                'id': `${layerId}-fill`,
+                'type': 'fill',
+                'source': 'custom-tileset',
+                'source-layer': layerId,
+                'filter': ['==', ['geometry-type'], 'Polygon'],
+                'paint': {
+                    'fill-color': color,
+                    'fill-opacity': 0.6
+                }
+            });
+
+            // Add line layer for lines and polygon outlines
+            map.addLayer({
+                'id': `${layerId}-line`,
+                'type': 'line',
+                'source': 'custom-tileset',
+                'source-layer': layerId,
+                'filter': ['any', 
+                    ['==', ['geometry-type'], 'LineString'],
+                    ['==', ['geometry-type'], 'Polygon']
+                ],
+                'paint': {
+                    'line-color': color,
+                    'line-width': 2
+                }
+            });
+
+            // Add circle layer for points
+            map.addLayer({
+                'id': `${layerId}-circle`,
+                'type': 'circle',
+                'source': 'custom-tileset',
+                'source-layer': layerId,
+                'filter': ['==', ['geometry-type'], 'Point'],
+                'paint': {
+                    'circle-color': color,
+                    'circle-radius': 4,
+                    'circle-stroke-width': 1,
+                    'circle-stroke-color': '#ffffff'
+                }
+            });
+
+            // Add click handlers for feature inspection
+            ['fill', 'line', 'circle'].forEach(suffix => {
+                const fullLayerId = `${layerId}-${suffix}`;
+                
+                map.on('click', fullLayerId, (e) => {
+                    const properties = e.features[0].properties;
+                    const coordinates = e.lngLat;
+
+                    let html = `<strong>Layer: ${layerId}</strong><br>`;
+                    for (const [key, value] of Object.entries(properties)) {
+                        html += `<strong>${key}:</strong> ${value}<br>`;
+                    }
+
+                    new mapboxgl.Popup()
+                        .setLngLat(coordinates)
+                        .setHTML(html)
+                        .addTo(map);
+                });
+
+                map.on('mouseenter', fullLayerId, () => {
+                    map.getCanvas().style.cursor = 'pointer';
+                });
+
+                map.on('mouseleave', fullLayerId, () => {
+                    map.getCanvas().style.cursor = '';
+                });
+            });
+        }
+
+        function toggleLayer(layerId, visible) {
+            const visibility = visible ? 'visible' : 'none';
+            
+            ['fill', 'line', 'circle'].forEach(suffix => {
+                const fullLayerId = `${layerId}-${suffix}`;
+                if (map.getLayer(fullLayerId)) {
+                    map.setLayoutProperty(fullLayerId, 'visibility', visibility);
+                }
+            });
+
+            if (visible) {
+                activeLayers.add(layerId);
+            } else {
+                activeLayers.delete(layerId);
+            }
+        }
+        
+        function resetPublicToken() {
+            if (confirm('This will clear your saved public token and prompt you to enter it again. Continue?')) {
+                localStorage.removeItem('mapbox_public_token');
+                location.reload();
+            }
+        }
+    </script>
+</body>
+</html>
+

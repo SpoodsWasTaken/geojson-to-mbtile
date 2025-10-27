@@ -407,16 +407,23 @@
                 <!-- Details will be populated by JavaScript -->
             </div>
 
-            <button class="button button-secondary" onclick="resetForm()">Convert Another File</button>
+            <div id="success_buttons" style="display: flex; gap: 0.75rem; margin-top: 1rem;">
+                <button class="button button-secondary" onclick="resetForm()" style="flex: 1;">Convert Another File</button>
+            </div>
         </div>
     </div>
 
     <script>
-        // Load saved tileset ID from localStorage
+        // Load saved tileset ID and token from localStorage
         window.addEventListener('DOMContentLoaded', function() {
             const savedTilesetId = localStorage.getItem('mapbox_tileset_id');
             if (savedTilesetId) {
                 document.getElementById('tileset_id').value = savedTilesetId;
+            }
+            
+            const savedToken = localStorage.getItem('mapbox_secret_token');
+            if (savedToken) {
+                document.getElementById('mapbox_token').value = savedToken;
             }
         });
 
@@ -440,6 +447,13 @@
         document.getElementById('tileset_id').addEventListener('change', function() {
             localStorage.setItem('mapbox_tileset_id', this.value);
         });
+        
+        // Save secret token to localStorage when changed
+        document.getElementById('mapbox_token').addEventListener('change', function() {
+            if (this.value) {
+                localStorage.setItem('mapbox_secret_token', this.value);
+            }
+        });
 
         // Form submission handling
         document.getElementById('uploadForm').addEventListener('submit', function(e) {
@@ -457,6 +471,16 @@
                 }
             } else {
                 loadingMessage.textContent = 'Processing your files... This may take a few minutes.';
+            }
+            
+            // Save tileset ID and token before submission
+            const tilesetId = document.getElementById('tileset_id').value;
+            const mapboxToken = document.getElementById('mapbox_token').value;
+            if (tilesetId) {
+                localStorage.setItem('mapbox_tileset_id', tilesetId);
+            }
+            if (mapboxToken) {
+                localStorage.setItem('mapbox_secret_token', mapboxToken);
             }
             
             document.getElementById('form_container').style.display = 'none';
@@ -567,6 +591,19 @@
             }
             
             successDetails.innerHTML = detailsHTML;
+            
+            // Add View Tileset button for Mapbox uploads
+            const successButtons = document.getElementById('success_buttons');
+            if (data.mode === 'mapbox' && data.tileset_id) {
+                successButtons.innerHTML = `
+                    <a href="/viewer?tileset_id=${encodeURIComponent(data.tileset_id)}" class="button button-primary" style="flex: 1; text-align: center;">View Tileset</a>
+                    <button class="button button-secondary" onclick="resetForm()" style="flex: 1;">Convert Another File</button>
+                `;
+            } else {
+                successButtons.innerHTML = `
+                    <button class="button button-secondary" onclick="resetForm()" style="flex: 1;">Convert Another File</button>
+                `;
+            }
         }
 
         function resetForm() {
