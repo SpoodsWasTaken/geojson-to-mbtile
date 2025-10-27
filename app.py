@@ -30,6 +30,10 @@ DEFAULT_PRODUCTION_TILESET = os.environ.get('DEFAULT_PRODUCTION_TILESET', '')
 MAPBOX_SECRET_TOKEN = os.environ.get('MAPBOX_SECRET_TOKEN', '')
 MAPBOX_PUBLIC_TOKEN = os.environ.get('MAPBOX_PUBLIC_TOKEN', '')
 
+# Data storage directory
+DATA_DIR = Path('/tmp/tileset_data')
+DATA_DIR.mkdir(exist_ok=True)
+
 def require_auth(f):
     """Decorator to require authentication for protected routes."""
     from functools import wraps
@@ -130,6 +134,35 @@ def viewer():
 def health():
     """Health check endpoint for Railway."""
     return jsonify({"status": "healthy"}), 200
+
+@app.route('/api/airports/<tileset_id>')
+@require_auth
+def get_airports(tileset_id):
+    """Get airports list for a specific tileset."""
+    # Sanitize tileset_id for filename
+    airports_filename = f"{tileset_id.replace('.', '_').replace('/', '_')}_airports.json"
+    airports_filepath = DATA_DIR / airports_filename
+    
+    if not airports_filepath.exists():
+        return jsonify({
+            "error": "Airports data not found for this tileset",
+            "tileset_id": tileset_id
+        }), 404
+    
+    try:
+        with open(airports_filepath, 'r') as f:
+            airports = json.load(f)
+        return jsonify({
+            "success": True,
+            "tileset_id": tileset_id,
+            "airports": airports,
+            "count": len(airports)
+        })
+    except Exception as e:
+        return jsonify({
+            "error": "Failed to load airports data",
+            "details": str(e)
+        }), 500
 
 @app.route('/upload', methods=['POST'])
 def upload():
@@ -275,6 +308,15 @@ def upload():
             
             # Sort by airport code
             airports_list.sort(key=lambda x: x['code'])
+            
+            # Save airports to JSON file for API access
+            # Use tileset_id as filename (sanitized)
+            if output_mode == 'mapbox':
+                airports_filename = f"{tileset_id.replace('.', '_').replace('/', '_')}_airports.json"
+                airports_filepath = DATA_DIR / airports_filename
+                with open(airports_filepath, 'w') as f:
+                    json.dump(airports_list, f, indent=2)
+                print(f"Saved {len(airports_list)} airports to {airports_filepath}")
             
             # Step 3: Group GeoJSON files by type (suffix after dash or underscore)
             files_by_type = defaultdict(list)

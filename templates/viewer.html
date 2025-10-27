@@ -646,218 +646,223 @@
         </div>
     </div>
 
+
     <script>
-        // Configuration
+        // ============================================================================
+        // CONFIGURATION
+        // ============================================================================
+        
         const TILESET_ID = '{{ tileset_id }}';
-        let map;
-        let currentPublicToken;
+        const MAPBOX_PUBLIC_TOKEN = '{{ mapbox_public_token }}';
+        
+        // ============================================================================
+        // STATE MANAGEMENT
+        // ============================================================================
+        
+        let map = null;
+        let currentPublicToken = MAPBOX_PUBLIC_TOKEN;
         let airports = [];
         let layers = [];
-
-        // Initialize
-        document.addEventListener('DOMContentLoaded', function() {
-            // Setup event listeners first
-            setupEventListeners();
-            // Then initialize viewer
-            initializeViewer();
-        });
+        let layerVisibility = {};  // Track visibility state for each layer
         
-        function setupEventListeners() {
-            // Token form
-            document.getElementById('token-form').addEventListener('submit', handleTokenSubmit);
-
-            // Production form
-            document.getElementById('production-form').addEventListener('submit', handleProductionSubmit);
-
-            // Push to production button
-            document.getElementById('push-production-btn').addEventListener('click', showProductionModal);
+        // ============================================================================
+        // INITIALIZATION
+        // ============================================================================
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Initializing Tileset Viewer v3.8.0...');
+            console.log('Tileset ID:', TILESET_ID);
             
-            // Style radio buttons
-            document.querySelectorAll('input[name="map-style"]').forEach(radio => {
-                radio.addEventListener('change', function() {
-                    if (this.value === 'custom') {
-                        document.getElementById('custom-style-fields').style.display = 'block';
-                        // Auto-apply if URL is already filled
-                        const styleUrl = document.getElementById('custom-style-url').value;
-                        if (styleUrl && map) {
-                            applyCustomStyle();
-                        }
-                    } else {
-                        document.getElementById('custom-style-fields').style.display = 'none';
-                        if (map) {
-                            applyDarkStyle();
-                        }
-                    }
-                });
-            });
-        }
-
-        async function initializeViewer() {
-            // Check for public token from localStorage or server
-            currentPublicToken = localStorage.getItem('mapbox_public_token') || '{{ mapbox_public_token }}';
+            // Setup event listeners
+            setupEventListeners();
+            
+            // Check for public token
+            currentPublicToken = localStorage.getItem('mapbox_public_token') || MAPBOX_PUBLIC_TOKEN;
             
             if (!currentPublicToken) {
                 showTokenModal();
                 return;
             }
-
-            // Validate token format
-            if (!currentPublicToken.startsWith('pk.')) {
-                showToast('Error', 'Invalid public token format. Must start with pk.', 'error');
-                showTokenModal();
-                return;
-            }
-
-            // Save to localStorage if from server
-            if ('{{ mapbox_public_token }}' && !localStorage.getItem('mapbox_public_token')) {
-                localStorage.setItem('mapbox_public_token', '{{ mapbox_public_token }}');
-            }
-
+            
+            // Set Mapbox access token
+            mapboxgl.accessToken = currentPublicToken;
+            
             // Initialize map
             initializeMap();
-        }
-
-        function initializeMap() {
-            mapboxgl.accessToken = currentPublicToken;
-
-            // Always start with dark style (default)
-            const savedCustomUrl = localStorage.getItem('custom_style_url') || 'mapbox://styles/ericbutton/cmh27faz3002o01rf7r040hag';
-            document.getElementById('custom-style-url').value = savedCustomUrl;
+        });
+        
+        // ============================================================================
+        // EVENT LISTENERS
+        // ============================================================================
+        
+        function setupEventListeners() {
+            // Token form
+            document.getElementById('token-form').addEventListener('submit', handleTokenSubmit);
             
-            // Force dark style on init
-            const styleUrl = 'mapbox://styles/mapbox/dark-v11';
-            document.getElementById('style-dark').checked = true;
-            document.getElementById('custom-style-fields').style.display = 'none';
-            localStorage.setItem('map_style_preference', 'dark');
-
+            // Production form
+            document.getElementById('production-form').addEventListener('submit', handleProductionSubmit);
+            
+            // Push to production button
+            document.getElementById('push-production-btn').addEventListener('click', showProductionModal);
+            
+            // Style radio buttons
+            document.querySelectorAll('input[name="map-style"]').forEach(radio => {
+                radio.addEventListener('change', handleStyleChange);
+            });
+        }
+        
+        // ============================================================================
+        // MAP INITIALIZATION
+        // ============================================================================
+        
+        function initializeMap() {
+            console.log('Creating map...');
+            
+            // Load saved style preference
+            const savedStyle = localStorage.getItem('map_style_preference') || 'dark';
+            const customStyleUrl = localStorage.getItem('custom_style_url') || '';
+            
+            // Set radio button
+            if (savedStyle === 'custom' && customStyleUrl) {
+                document.getElementById('style-custom').checked = true;
+                document.getElementById('custom-style-url').value = customStyleUrl;
+                document.getElementById('custom-style-fields').style.display = 'block';
+            } else {
+                document.getElementById('style-dark').checked = true;
+                document.getElementById('custom-style-fields').style.display = 'none';
+            }
+            
+            // Determine initial style URL
+            let initialStyleUrl = 'mapbox://styles/mapbox/dark-v11';
+            if (savedStyle === 'custom' && customStyleUrl) {
+                initialStyleUrl = customStyleUrl;
+            }
+            
+            // Create map
             map = new mapboxgl.Map({
                 container: 'map',
-                style: styleUrl,
+                style: initialStyleUrl,
                 center: [-98, 38],
-                zoom: 6  // Increased from 4 to 6 to load more tile data
+                zoom: 6
             });
-
-            map.on('load', function() {
-                addTilesetLayers();
-                setupEventListeners();
-            });
-
+            
             // Add navigation controls
             map.addControl(new mapboxgl.NavigationControl(), 'top-right');
-        }
-
-        function addTilesetLayers() {
-            // Add tileset source
-            map.addSource('tileset', {
-                type: 'vector',
-                url: `mapbox://${TILESET_ID}`
+            
+            // Wait for style to load, then add tileset layers
+            map.on('style.load', function() {
+                console.log('Map style loaded');
+                addTilesetLayers();
             });
-
-            // Get layer information from tileset
+        }
+        
+        // ============================================================================
+        // TILESET LAYERS
+        // ============================================================================
+        
+        function addTilesetLayers() {
+            console.log('Adding tileset layers...');
+            
+            // Add tileset source
+            if (!map.getSource('tileset')) {
+                map.addSource('tileset', {
+                    type: 'vector',
+                    url: `mapbox://${TILESET_ID}`
+                });
+            }
+            
+            // Fetch tileset metadata to get layers
             fetch(`https://api.mapbox.com/v4/${TILESET_ID}.json?secure&access_token=${currentPublicToken}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.vector_layers) {
                         layers = data.vector_layers.map(l => l.id);
-                        renderLayerList();
+                        console.log('Found layers:', layers);
                         
-                        // Add each layer to the map
+                        // Load saved visibility states
+                        loadLayerVisibility();
+                        
+                        // Add each layer to map
                         layers.forEach(layerId => {
                             addLayerToMap(layerId);
                         });
                         
-                        // Load airports after layers are added
-                        // Try from localStorage first, fallback to map extraction
-                        setTimeout(() => {
-                            loadAirports();
-                        }, 2000);  // Increased from 500ms to 2000ms
+                        // Render layer list UI
+                        renderLayerList();
+                        
+                        // Load airports
+                        loadAirports();
                     }
                 })
                 .catch(error => {
                     console.error('Error loading tileset metadata:', error);
-                    showToast('Warning', 'Could not load tileset metadata', 'warning');
+                    showToast('Error', 'Failed to load tileset metadata', 'error');
                 });
-        }
-
-        // Color scheme for different layer types
-        const layerColors = {
-            'rwy': '#FF6B6B',      // Red for runways
-            'taxiway': '#4ECDC4',  // Cyan for taxiways
-            'twy': '#4ECDC4',      // Cyan for taxiways (alternate)
-            'apron': '#95E1D3',    // Light green for aprons
-            'pave': '#A8E6CF',     // Pale green for pavement
-            'grass': '#7FB069',    // Green for grass
-            'threshold': '#FFE66D', // Yellow for thresholds
-            'rwcl': '#FFA07A',     // Orange for runway centerlines
-            'rwyend': '#FF8C94',   // Pink for runway ends
-            'aim': '#B4A7D6',      // Purple for aim points
-            'arrow': '#9B59B6',    // Purple for arrows
-            'chevron': '#E67E22',  // Orange for chevrons
-            'num': '#F39C12',      // Gold for numbers
-            'small': '#BDC3C7',    // Grey for small features
-            'emas': '#E74C3C',     // Red for EMAS
-            'default': '#088'      // Default teal
-        };
-        
-        function getLayerColor(layerId) {
-            return layerColors[layerId.toLowerCase()] || layerColors['default'];
         }
         
         function addLayerToMap(layerId) {
-            const color = getLayerColor(layerId);
+            // Remove existing layers if they exist
+            if (map.getLayer(`${layerId}-fill`)) map.removeLayer(`${layerId}-fill`);
+            if (map.getLayer(`${layerId}-line`)) map.removeLayer(`${layerId}-line`);
+            if (map.getLayer(`${layerId}-circle`)) map.removeLayer(`${layerId}-circle`);
+            
+            // Get visibility state (default to visible)
+            const visibility = layerVisibility[layerId] !== false ? 'visible' : 'none';
+            
             // Add fill layer for polygons
-            if (!map.getLayer(`${layerId}-fill`)) {
-                map.addLayer({
-                    'id': `${layerId}-fill`,
-                    'type': 'fill',
-                    'source': 'tileset',
-                    'source-layer': layerId,
-                    'paint': {
-                        'fill-color': color,
-                        'fill-opacity': 0.5
-                    },
-                    'filter': ['==', '$type', 'Polygon']
-                });
-            }
-
+            map.addLayer({
+                'id': `${layerId}-fill`,
+                'type': 'fill',
+                'source': 'tileset',
+                'source-layer': layerId,
+                'layout': {
+                    'visibility': visibility
+                },
+                'paint': {
+                    'fill-color': '#088',
+                    'fill-opacity': 0.4
+                },
+                'filter': ['==', ['geometry-type'], 'Polygon']
+            });
+            
             // Add line layer for lines and polygon outlines
-            if (!map.getLayer(`${layerId}-line`)) {
-                map.addLayer({
-                    'id': `${layerId}-line`,
-                    'type': 'line',
-                    'source': 'tileset',
-                    'source-layer': layerId,
-                    'paint': {
-                        'line-color': color,
-                        'line-width': 2,
-                        'line-opacity': 0.8
-                    }
-                });
-            }
-
+            map.addLayer({
+                'id': `${layerId}-line`,
+                'type': 'line',
+                'source': 'tileset',
+                'source-layer': layerId,
+                'layout': {
+                    'visibility': visibility
+                },
+                'paint': {
+                    'line-color': '#0ff',
+                    'line-width': 2
+                }
+            });
+            
             // Add circle layer for points
-            if (!map.getLayer(`${layerId}-circle`)) {
-                map.addLayer({
-                    'id': `${layerId}-circle`,
-                    'type': 'circle',
-                    'source': 'tileset',
-                    'source-layer': layerId,
-                    'paint': {
-                        'circle-radius': 6,
-                        'circle-color': color,
-                        'circle-opacity': 0.7,
-                        'circle-stroke-width': 2,
-                        'circle-stroke-color': '#fff'
-                    },
-                    'filter': ['==', '$type', 'Point']
-                });
-            }
-
+            map.addLayer({
+                'id': `${layerId}-circle`,
+                'type': 'circle',
+                'source': 'tileset',
+                'source-layer': layerId,
+                'layout': {
+                    'visibility': visibility
+                },
+                'paint': {
+                    'circle-radius': 5,
+                    'circle-color': '#0ff',
+                    'circle-stroke-color': '#fff',
+                    'circle-stroke-width': 1
+                },
+                'filter': ['==', ['geometry-type'], 'Point']
+            });
+            
             // Add click handler for popups
             map.on('click', `${layerId}-fill`, showFeaturePopup);
             map.on('click', `${layerId}-line`, showFeaturePopup);
             map.on('click', `${layerId}-circle`, showFeaturePopup);
-
+            
             // Change cursor on hover
             map.on('mouseenter', `${layerId}-fill`, () => { map.getCanvas().style.cursor = 'pointer'; });
             map.on('mouseleave', `${layerId}-fill`, () => { map.getCanvas().style.cursor = ''; });
@@ -866,210 +871,59 @@
             map.on('mouseenter', `${layerId}-circle`, () => { map.getCanvas().style.cursor = 'pointer'; });
             map.on('mouseleave', `${layerId}-circle`, () => { map.getCanvas().style.cursor = ''; });
         }
-
+        
         function showFeaturePopup(e) {
             const feature = e.features[0];
-            const properties = feature.properties;
-            const layerId = feature.layer['source-layer'];
-
-            let html = `<strong>Layer:</strong> ${layerId}<br>`;
-            for (const [key, value] of Object.entries(properties)) {
-                html += `<strong>${key}:</strong> ${value}<br>`;
+            const props = feature.properties;
+            
+            // Build popup HTML
+            let html = '<div style="max-height: 300px; overflow-y: auto;">';
+            html += '<table style="font-size: 12px;">';
+            for (const [key, value] of Object.entries(props)) {
+                html += `<tr><td style="padding: 2px 8px 2px 0; font-weight: bold;">${key}:</td><td style="padding: 2px;">${value}</td></tr>`;
             }
-
+            html += '</table></div>';
+            
             new mapboxgl.Popup()
                 .setLngLat(e.lngLat)
                 .setHTML(html)
                 .addTo(map);
         }
-
-        function loadAirports() {
-            // Load airports from localStorage (stored during upload)
-            const storageKey = `airports_${TILESET_ID}`;
-            const storedAirports = localStorage.getItem(storageKey);
-            
-            if (storedAirports) {
-                try {
-                    airports = JSON.parse(storedAirports);
-                    console.log(`Loaded ${airports.length} airports from storage:`, airports);
-                    renderAirportList();
-                    return;
-                } catch (e) {
-                    console.error('Error parsing stored airports:', e);
-                }
-            }
-            
-            // Fallback: Try to extract from map features (old method)
-            console.log('No stored airports found, extracting from map...');
-            extractAirportsFromMap();
-        }
         
-        function extractAirportsFromMap() {
-            // Fallback method: Extract airport codes by querying map features
-            const airportSet = new Set();
-
-            // Query all rendered features from all layers
-            layers.forEach(layerId => {
+        // ============================================================================
+        // LAYER VISIBILITY MANAGEMENT
+        // ============================================================================
+        
+        function loadLayerVisibility() {
+            const storageKey = `layer_visibility_${TILESET_ID}`;
+            const saved = localStorage.getItem(storageKey);
+            
+            if (saved) {
                 try {
-                    const features = map.queryRenderedFeatures({ layers: [
-                        `${layerId}-fill`,
-                        `${layerId}-line`, 
-                        `${layerId}-circle`
-                    ]});
-                    
-                    features.forEach(feature => {
-                        const props = feature.properties;
-                        if (props.airport_id) {
-                            airportSet.add(props.airport_id.toUpperCase());
-                        }
-                    });
+                    layerVisibility = JSON.parse(saved);
+                    console.log('Loaded layer visibility:', layerVisibility);
                 } catch (e) {
-                    console.log('Could not query layer:', layerId, e);
+                    console.error('Error parsing layer visibility:', e);
+                    layerVisibility = {};
                 }
-            });
-
-            // If no airports found, try source features
-            if (airportSet.size === 0) {
+            } else {
+                // Default: all layers visible
+                layerVisibility = {};
                 layers.forEach(layerId => {
-                    try {
-                        const features = map.querySourceFeatures('tileset', {
-                            sourceLayer: layerId
-                        });
-                        
-                        features.forEach(feature => {
-                            const props = feature.properties;
-                            if (props.airport_id) {
-                                airportSet.add(props.airport_id.toUpperCase());
-                            }
-                        });
-                    } catch (e) {
-                        console.log('Could not query source layer:', layerId, e);
-                    }
+                    layerVisibility[layerId] = true;
                 });
             }
-
-            // Convert to array of objects with just code (for compatibility)
-            airports = Array.from(airportSet).sort().map(code => ({ code: code }));
-            console.log('Extracted airports from map:', airports);
-            renderAirportList();
         }
-
-        function renderAirportList() {
-            const container = document.getElementById('airport-list');
-            
-            if (airports.length === 0) {
-                container.innerHTML = '<div class="airport-list-empty">No airports detected</div>';
-                return;
-            }
-
-            container.innerHTML = airports.map(airport => {
-                const code = typeof airport === 'string' ? airport : airport.code;
-                const count = airport.feature_count ? ` (${airport.feature_count})` : '';
-                return `
-                    <div class="airport-item" onclick="flyToAirport('${code}')">
-                        <span class="airport-code">${code}${count}</span>
-                        <span class="airport-count">→</span>
-                    </div>
-                `;
-            }).join('');
+        
+        function saveLayerVisibility() {
+            const storageKey = `layer_visibility_${TILESET_ID}`;
+            localStorage.setItem(storageKey, JSON.stringify(layerVisibility));
         }
-
-        function renderLayerList() {
-            const container = document.getElementById('layer-list');
-            
-            if (layers.length === 0) {
-                container.innerHTML = '<div class="airport-list-empty">No layers found</div>';
-                return;
-            }
-
-            container.innerHTML = layers.map(layerId => `
-                <div class="layer-item">
-                    <input type="checkbox" id="layer-${layerId}" data-layer="${layerId}" checked onchange="toggleLayer('${layerId}', this.checked)">
-                    <label for="layer-${layerId}" class="layer-label">${layerId}</label>
-                </div>
-            `).join('');
-        }
-
-        function flyToAirport(code) {
-            // First, check if we have stored coordinates for this airport
-            const airport = airports.find(a => 
-                (typeof a === 'string' ? a : a.code) === code
-            );
-            
-            if (airport && typeof airport === 'object' && airport.center) {
-                // Use stored center coordinates
-                const [lon, lat] = airport.center;
-                
-                if (airport.bounds) {
-                    // Use stored bounds for better framing
-                    const [minLon, minLat, maxLon, maxLat] = airport.bounds;
-                    map.fitBounds(
-                        [[minLon, minLat], [maxLon, maxLat]],
-                        { padding: 50, maxZoom: 15, duration: 1000 }
-                    );
-                } else {
-                    // Just fly to center
-                    map.flyTo({
-                        center: [lon, lat],
-                        zoom: 14,
-                        duration: 1000
-                    });
-                }
-                
-                showToast('Success', `Zoomed to ${code}`, 'success');
-                return;
-            }
-            
-            // Fallback: Query features from map (old method)
-            const features = [];
-            
-            layers.forEach(layerId => {
-                try {
-                    const layerFeatures = map.querySourceFeatures('tileset', {
-                        sourceLayer: layerId
-                    });
-                    
-                    const airportFeatures = layerFeatures.filter(f => 
-                        f.properties && f.properties.airport_id === code
-                    );
-                    
-                    features.push(...airportFeatures);
-                } catch (e) {
-                    console.log('Could not query layer:', layerId, e);
-                }
-            });
-
-            if (features.length === 0) {
-                showToast('Info', `No features found for ${code}. Try zooming in first.`, 'warning');
-                return;
-            }
-
-            // Calculate bounding box
-            const bounds = new mapboxgl.LngLatBounds();
-            features.forEach(feature => {
-                if (feature.geometry.type === 'Point') {
-                    bounds.extend(feature.geometry.coordinates);
-                } else if (feature.geometry.type === 'LineString') {
-                    feature.geometry.coordinates.forEach(coord => bounds.extend(coord));
-                } else if (feature.geometry.type === 'Polygon') {
-                    feature.geometry.coordinates[0].forEach(coord => bounds.extend(coord));
-                } else if (feature.geometry.type === 'MultiPolygon') {
-                    feature.geometry.coordinates.forEach(polygon => {
-                        polygon[0].forEach(coord => bounds.extend(coord));
-                    });
-                }
-            });
-
-            map.fitBounds(bounds, {
-                padding: 50,
-                maxZoom: 15,
-                duration: 1000
-            });
-
-            showToast('Success', `Zoomed to ${code}`, 'success');
-        }
-
+        
         function toggleLayer(layerId, visible) {
+            layerVisibility[layerId] = visible;
+            saveLayerVisibility();
+            
             const visibility = visible ? 'visible' : 'none';
             
             if (map.getLayer(`${layerId}-fill`)) {
@@ -1085,88 +939,198 @@
         
         function toggleAllLayers() {
             // Check if any layer is currently off
-            const checkboxes = document.querySelectorAll('#layer-list input[type="checkbox"]');
-            const anyUnchecked = Array.from(checkboxes).some(cb => !cb.checked);
+            const anyOff = Object.values(layerVisibility).some(v => v === false);
             
             // If any are off, turn all on. If all are on, turn all off.
-            const newState = anyUnchecked;
+            const newState = anyOff;
             
-            checkboxes.forEach(checkbox => {
-                checkbox.checked = newState;
-                const layerId = checkbox.dataset.layer;
+            layers.forEach(layerId => {
+                layerVisibility[layerId] = newState;
                 toggleLayer(layerId, newState);
             });
+            
+            // Update UI
+            renderLayerList();
             
             const action = newState ? 'enabled' : 'disabled';
             showToast('Success', `All layers ${action}`, 'success');
         }
-
+        
+        function renderLayerList() {
+            const container = document.getElementById('layer-list');
+            
+            if (layers.length === 0) {
+                container.innerHTML = '<div class="airport-list-empty">Loading layers...</div>';
+                return;
+            }
+            
+            container.innerHTML = layers.map(layerId => {
+                const checked = layerVisibility[layerId] !== false ? 'checked' : '';
+                return `
+                    <div class="layer-item">
+                        <input type="checkbox" 
+                               id="layer-${layerId}" 
+                               data-layer="${layerId}"
+                               ${checked}
+                               onchange="toggleLayer('${layerId}', this.checked)">
+                        <label for="layer-${layerId}" class="layer-label">${layerId}</label>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        // ============================================================================
+        // STYLE SWITCHING
+        // ============================================================================
+        
+        function handleStyleChange(e) {
+            const styleType = e.target.value;
+            
+            if (styleType === 'custom') {
+                document.getElementById('custom-style-fields').style.display = 'block';
+            } else {
+                document.getElementById('custom-style-fields').style.display = 'none';
+                applyDarkStyle();
+            }
+        }
+        
         function applyCustomStyle() {
-            const styleUrl = document.getElementById('custom-style-url').value;
+            const styleUrl = document.getElementById('custom-style-url').value.trim();
             
             if (!styleUrl) {
                 showToast('Error', 'Please enter a style URL', 'error');
                 return;
             }
-
+            
+            // Save preferences
             localStorage.setItem('map_style_preference', 'custom');
             localStorage.setItem('custom_style_url', styleUrl);
-
-            // Remove existing source and layers before style change
-            if (map.getSource('tileset')) {
-                layers.forEach(layerId => {
-                    if (map.getLayer(`${layerId}-fill`)) map.removeLayer(`${layerId}-fill`);
-                    if (map.getLayer(`${layerId}-line`)) map.removeLayer(`${layerId}-line`);
-                    if (map.getLayer(`${layerId}-circle`)) map.removeLayer(`${layerId}-circle`);
-                });
-                map.removeSource('tileset');
-            }
-
+            
+            // Change style
             map.setStyle(styleUrl);
+            
+            // Re-add tileset layers after style loads
             map.once('style.load', function() {
+                console.log('Custom style loaded, re-adding tileset layers');
                 addTilesetLayers();
             });
-
+            
             showToast('Success', 'Custom style applied', 'success');
         }
-
+        
         function applyDarkStyle() {
+            // Save preference
             localStorage.setItem('map_style_preference', 'dark');
             
-            // Remove existing source and layers before style change
-            if (map.getSource('tileset')) {
-                layers.forEach(layerId => {
-                    if (map.getLayer(`${layerId}-fill`)) map.removeLayer(`${layerId}-fill`);
-                    if (map.getLayer(`${layerId}-line`)) map.removeLayer(`${layerId}-line`);
-                    if (map.getLayer(`${layerId}-circle`)) map.removeLayer(`${layerId}-circle`);
-                });
-                map.removeSource('tileset');
-            }
-            
+            // Change style
             map.setStyle('mapbox://styles/mapbox/dark-v11');
+            
+            // Re-add tileset layers after style loads
             map.once('style.load', function() {
+                console.log('Dark style loaded, re-adding tileset layers');
                 addTilesetLayers();
             });
-
+            
             showToast('Success', 'Dark style applied', 'success');
         }
-
-        // Token modal functions
+        
+        // ============================================================================
+        // AIRPORTS
+        // ============================================================================
+        
+        function loadAirports() {
+            console.log('Loading airports from API...');
+            
+            fetch(`/api/airports/${TILESET_ID}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success && data.airports) {
+                        airports = data.airports;
+                        console.log(`Loaded ${airports.length} airports:`, airports);
+                        renderAirportList();
+                    } else {
+                        throw new Error('Invalid response format');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading airports:', error);
+                    document.getElementById('airport-list').innerHTML = 
+                        '<div class="airport-list-empty">No airports data available</div>';
+                });
+        }
+        
+        function renderAirportList() {
+            const container = document.getElementById('airport-list');
+            
+            if (airports.length === 0) {
+                container.innerHTML = '<div class="airport-list-empty">No airports found</div>';
+                return;
+            }
+            
+            container.innerHTML = airports.map(airport => {
+                const count = airport.feature_count ? ` (${airport.feature_count})` : '';
+                return `
+                    <div class="airport-item" onclick="flyToAirport('${airport.code}')">
+                        <span class="airport-code">${airport.code}${count}</span>
+                        <span class="airport-count">→</span>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function flyToAirport(code) {
+            const airport = airports.find(a => a.code === code);
+            
+            if (!airport) {
+                showToast('Error', `Airport ${code} not found`, 'error');
+                return;
+            }
+            
+            if (airport.bounds) {
+                const [minLon, minLat, maxLon, maxLat] = airport.bounds;
+                map.fitBounds(
+                    [[minLon, minLat], [maxLon, maxLat]],
+                    { padding: 50, maxZoom: 15, duration: 1000 }
+                );
+            } else if (airport.center) {
+                map.flyTo({
+                    center: airport.center,
+                    zoom: 14,
+                    duration: 1000
+                });
+            } else {
+                showToast('Error', `No coordinates for ${code}`, 'error');
+                return;
+            }
+            
+            showToast('Success', `Zoomed to ${code}`, 'success');
+        }
+        
+        // ============================================================================
+        // TOKEN MANAGEMENT
+        // ============================================================================
+        
         function showTokenModal() {
             document.getElementById('token-modal').classList.add('active');
         }
-
+        
         function handleTokenSubmit(e) {
             e.preventDefault();
             const token = document.getElementById('public-token').value.trim();
-
+            
             if (!token.startsWith('pk.')) {
                 showToast('Error', 'Invalid token format. Must start with pk.', 'error');
                 return;
             }
-
+            
             localStorage.setItem('mapbox_public_token', token);
             currentPublicToken = token;
+            mapboxgl.accessToken = token;
             
             document.getElementById('token-modal').classList.remove('active');
             showToast('Success', 'Token saved successfully', 'success');
@@ -1174,15 +1138,18 @@
             // Initialize map
             initializeMap();
         }
-
+        
         function resetPublicToken() {
             if (confirm('Are you sure you want to reset your public token?')) {
                 localStorage.removeItem('mapbox_public_token');
                 showTokenModal();
             }
         }
-
-        // Production modal functions
+        
+        // ============================================================================
+        // PRODUCTION DEPLOYMENT
+        // ============================================================================
+        
         function showProductionModal() {
             const productionTilesetId = localStorage.getItem('production_tileset_id');
             
@@ -1204,61 +1171,55 @@
                 document.getElementById('change-tileset-btn').style.display = 'inline-flex';
                 document.getElementById('commit-btn').style.display = 'inline-flex';
             }
-
+            
             document.getElementById('production-modal').classList.add('active');
         }
-
+        
         function closeProductionModal() {
             document.getElementById('production-modal').classList.remove('active');
-            document.getElementById('confirm-checkbox').checked = false;
         }
-
-        function changeProductionTileset() {
-            document.getElementById('production-description').textContent = 'Enter a new production tileset ID.';
+        
+        function configureProduction() {
+            const tilesetId = document.getElementById('production-tileset-id').value.trim();
+            
+            if (!tilesetId) {
+                showToast('Error', 'Please enter a tileset ID', 'error');
+                return;
+            }
+            
+            if (!tilesetId.includes('.')) {
+                showToast('Error', 'Tileset ID must be in format: username.tileset-name', 'error');
+                return;
+            }
+            
+            localStorage.setItem('production_tileset_id', tilesetId);
+            showToast('Success', 'Production tileset configured', 'success');
+            closeProductionModal();
+        }
+        
+        function changeTileset() {
+            document.getElementById('production-description').textContent = 'Enter your production tileset ID to deploy.';
             document.getElementById('production-configure').style.display = 'block';
             document.getElementById('production-confirm').style.display = 'none';
             document.getElementById('configure-btn').style.display = 'inline-flex';
             document.getElementById('change-tileset-btn').style.display = 'none';
             document.getElementById('commit-btn').style.display = 'none';
-            
-            const currentId = localStorage.getItem('production_tileset_id');
-            if (currentId) {
-                document.getElementById('production-tileset-id').value = currentId;
-            }
         }
-
-        async function handleProductionSubmit(e) {
+        
+        function handleProductionSubmit(e) {
             e.preventDefault();
-
+            
             const productionTilesetId = localStorage.getItem('production_tileset_id');
-
-            if (!productionTilesetId || document.getElementById('production-configure').style.display !== 'none') {
-                // Save configuration
-                const newId = document.getElementById('production-tileset-id').value.trim();
-                
-                if (!newId || !newId.includes('.')) {
-                    showToast('Error', 'Invalid tileset ID format', 'error');
-                    return;
-                }
-
-                localStorage.setItem('production_tileset_id', newId);
-                showToast('Success', 'Production tileset configured', 'success');
-                closeProductionModal();
+            const updateMode = document.querySelector('input[name="update-mode"]:checked').value;
+            
+            if (!productionTilesetId) {
+                showToast('Error', 'Please configure production tileset first', 'error');
                 return;
             }
-
-            // Commit to production
-            const updateMode = document.getElementById('production-mode').value;
-            const confirmed = document.getElementById('confirm-checkbox').checked;
-
-            if (!confirmed) {
-                showToast('Error', 'Please confirm you understand this action', 'error');
-                return;
-            }
-
+            
             closeProductionModal();
             showLoading('Pushing to Production', 'This may take several minutes...');
-
+            
             // This would call a backend endpoint to handle the production push
             // For now, simulate the process
             setTimeout(() => {
@@ -1266,8 +1227,11 @@
                 showToast('Success', `Successfully pushed to production (${updateMode} mode)`, 'success');
             }, 3000);
         }
-
-        // Toast functions
+        
+        // ============================================================================
+        // UI UTILITIES
+        // ============================================================================
+        
         function showToast(title, message, type = 'info') {
             const container = document.getElementById('toast-container');
             const toast = document.createElement('div');
@@ -1284,18 +1248,16 @@
                 setTimeout(() => toast.remove(), 300);
             }, 5000);
         }
-
-        // Loading functions
+        
         function showLoading(title, message) {
             document.getElementById('loading-title').textContent = title;
             document.getElementById('loading-message').textContent = message;
             document.getElementById('loading-overlay').classList.add('active');
         }
-
+        
         function hideLoading() {
             document.getElementById('loading-overlay').classList.remove('active');
         }
     </script>
 </body>
 </html>
-
