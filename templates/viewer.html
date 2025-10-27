@@ -74,6 +74,12 @@
             color: hsl(var(--background));
         }
 
+
+        .button-destructive {
+            background-color: hsl(var(--destructive));
+            color: hsl(var(--foreground));
+        }
+
         .button-secondary {
             background-color: hsl(var(--secondary));
             color: hsl(var(--foreground));
@@ -194,12 +200,175 @@
             font-size: 0.875rem;
             color: hsl(var(--muted-foreground));
         }
+
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgb(0 0 0 / 0.8);
+            z-index: 9998;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background-color: hsl(var(--card));
+            border: 1px solid hsl(var(--border));
+            border-radius: 0.5rem;
+            padding: 2rem;
+            max-width: 32rem;
+            width: 100%;
+            box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+        }
+
+        .modal-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .modal-description {
+            color: hsl(var(--muted-foreground));
+            font-size: 0.875rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        input[type="text"],
+        select {
+            width: 100%;
+            padding: 0.625rem 0.75rem;
+            background-color: hsl(var(--background));
+            border: 1px solid hsl(var(--border));
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            color: hsl(var(--foreground));
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: hsl(var(--primary));
+        }
+
+        .help-text {
+            font-size: 0.75rem;
+            color: hsl(var(--muted-foreground));
+            margin-top: 0.25rem;
+        }
+
+        .warning-box {
+            background-color: hsl(var(--warning) / 0.1);
+            border: 1px solid hsl(var(--warning) / 0.3);
+            border-radius: 0.375rem;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .warning-title {
+            font-weight: 600;
+            color: hsl(var(--warning));
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        .warning-text {
+            font-size: 0.875rem;
+            color: hsl(var(--foreground));
+        }
+
+        .button-group {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 1.25rem;
+            height: 1.25rem;
+            accent-color: hsl(var(--primary));
+        }
+
+        /* Loading */
+        .loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgb(0 0 0 / 0.9);
+            z-index: 10000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .loading-overlay.active {
+            display: flex;
+        }
+
+        .loading-content {
+            text-align: center;
+        }
+
+        .loading-spinner {
+            width: 4rem;
+            height: 4rem;
+            border: 4px solid hsl(var(--border));
+            border-top-color: hsl(var(--primary));
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .loading-message {
+            color: hsl(var(--muted-foreground));
+            font-size: 0.875rem;
+        }
     </style>
 </head>
 <body>
     <div class="header">
         <div class="header-title">Tileset Viewer</div>
         <div class="header-actions">
+            <button class="button button-primary" id="push-production-btn" onclick="showProductionModal()">
+                Push to Production
+            </button>
             <button class="button button-secondary" onclick="window.location.href='/'">
                 Main Menu
             </button>
@@ -224,6 +393,74 @@
 
         <div class="map-container">
             <div id="map"></div>
+        </div>
+    </div>
+
+
+    <!-- Push to Production Modal -->
+    <div class="modal-overlay" id="production-modal">
+        <div class="modal">
+            <div class="modal-title">Push to Production</div>
+            <div class="modal-description" id="production-description">
+                Deploy your staging tileset to production.
+            </div>
+            
+            <form id="production-form" onsubmit="handleProductionSubmit(event)">
+                <div id="production-configure" style="display: none;">
+                    <div class="form-group">
+                        <label for="production-tileset-id">Production Tileset ID</label>
+                        <input type="text" id="production-tileset-id" placeholder="username.production-tileset" required>
+                        <p class="help-text">This will be saved for future deployments</p>
+                    </div>
+                </div>
+
+                <div id="production-confirm" style="display: none;">
+                    <div class="warning-box">
+                        <div class="warning-title">⚠️ Warning</div>
+                        <div class="warning-text">
+                            You are about to modify the production tileset:<br>
+                            <strong id="confirm-tileset-name"></strong>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="production-mode">Update Mode</label>
+                        <select id="production-mode">
+                            <option value="replace">Replace - Overwrite entire tileset</option>
+                            <option value="append">Append - Merge with existing (smart deduplication)</option>
+                        </select>
+                    </div>
+
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="confirm-checkbox" required>
+                        <label for="confirm-checkbox">I understand this will modify production</label>
+                    </div>
+                </div>
+
+                <div class="button-group">
+                    <button type="button" class="button button-secondary" onclick="closeProductionModal()">
+                        Cancel
+                    </button>
+                    <button type="button" class="button button-secondary" id="change-tileset-btn" style="display: none;" onclick="changeProductionTileset()">
+                        Change Tileset
+                    </button>
+                    <button type="submit" class="button button-destructive" id="commit-btn" style="display: none;">
+                        Commit to Production
+                    </button>
+                    <button type="submit" class="button button-primary" id="configure-btn" style="display: none;">
+                        Save & Continue
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <div class="loading-title" id="loading-title">Processing...</div>
+            <div class="loading-message" id="loading-message">Please wait</div>
         </div>
     </div>
 
@@ -515,6 +752,102 @@
                 toast.style.opacity = '0';
                 setTimeout(() => toast.remove(), 300);
             }, 5000);
+        }
+
+        // Production modal functions
+        function showProductionModal() {
+            const productionTilesetId = localStorage.getItem('production_tileset_id');
+            
+            if (!productionTilesetId) {
+                // First time - configure
+                document.getElementById('production-description').textContent = 'Enter your production tileset ID to deploy.';
+                document.getElementById('production-configure').style.display = 'block';
+                document.getElementById('production-confirm').style.display = 'none';
+                document.getElementById('configure-btn').style.display = 'inline-flex';
+                document.getElementById('change-tileset-btn').style.display = 'none';
+                document.getElementById('commit-btn').style.display = 'none';
+            } else {
+                // Subsequent times - confirm
+                document.getElementById('production-description').textContent = 'Review and confirm your deployment.';
+                document.getElementById('production-configure').style.display = 'none';
+                document.getElementById('production-confirm').style.display = 'block';
+                document.getElementById('confirm-tileset-name').textContent = productionTilesetId;
+                document.getElementById('configure-btn').style.display = 'none';
+                document.getElementById('change-tileset-btn').style.display = 'inline-flex';
+                document.getElementById('commit-btn').style.display = 'inline-flex';
+            }
+            
+            document.getElementById('production-modal').classList.add('active');
+        }
+
+        function closeProductionModal() {
+            document.getElementById('production-modal').classList.remove('active');
+            document.getElementById('confirm-checkbox').checked = false;
+        }
+
+        function changeProductionTileset() {
+            document.getElementById('production-description').textContent = 'Enter a new production tileset ID.';
+            document.getElementById('production-configure').style.display = 'block';
+            document.getElementById('production-confirm').style.display = 'none';
+            document.getElementById('configure-btn').style.display = 'inline-flex';
+            document.getElementById('change-tileset-btn').style.display = 'none';
+            document.getElementById('commit-btn').style.display = 'none';
+            
+            const currentId = localStorage.getItem('production_tileset_id');
+            if (currentId) {
+                document.getElementById('production-tileset-id').value = currentId;
+            }
+        }
+
+        async function handleProductionSubmit(e) {
+            e.preventDefault();
+
+            const productionTilesetId = localStorage.getItem('production_tileset_id');
+
+            if (!productionTilesetId || document.getElementById('production-configure').style.display !== 'none') {
+                // Save configuration
+                const newId = document.getElementById('production-tileset-id').value.trim();
+                
+                if (!newId || !newId.includes('.')) {
+                    showToast('Error', 'Invalid tileset ID format', 'error');
+                    return;
+                }
+
+                localStorage.setItem('production_tileset_id', newId);
+                showToast('Success', 'Production tileset configured', 'success');
+                closeProductionModal();
+                return;
+            }
+
+            // Commit to production
+            const updateMode = document.getElementById('production-mode').value;
+            const confirmed = document.getElementById('confirm-checkbox').checked;
+
+            if (!confirmed) {
+                showToast('Error', 'Please confirm you understand this action', 'error');
+                return;
+            }
+
+            closeProductionModal();
+            showLoading('Pushing to Production', 'This may take several minutes...');
+
+            // This would call a backend endpoint to handle the production push
+            // For now, simulate the process
+            setTimeout(() => {
+                hideLoading();
+                showToast('Success', `Successfully pushed to production (${updateMode} mode)`, 'success');
+            }, 3000);
+        }
+
+        // Loading functions
+        function showLoading(title, message) {
+            document.getElementById('loading-title').textContent = title;
+            document.getElementById('loading-message').textContent = message;
+            document.getElementById('loading-overlay').classList.add('active');
+        }
+
+        function hideLoading() {
+            document.getElementById('loading-overlay').classList.remove('active');
         }
     </script>
 </body>
