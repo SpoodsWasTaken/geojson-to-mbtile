@@ -530,7 +530,10 @@
 
             <!-- Airports Section -->
             <div class="sidebar-section">
-                <div class="section-title">Airports</div>
+                <div class="section-title" style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>Airports</span>
+                    <button onclick="extractAirports()" class="button" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" title="Refresh airport list from visible features">Refresh</button>
+                </div>
                 <div class="airport-list" id="airport-list">
                     <div class="airport-list-empty">Loading airports...</div>
                 </div>
@@ -724,7 +727,7 @@
                 container: 'map',
                 style: styleUrl,
                 center: [-98, 38],
-                zoom: 4
+                zoom: 6  // Increased from 4 to 6 to load more tile data
             });
 
             map.on('load', function() {
@@ -757,10 +760,10 @@
                         });
                         
                         // Extract airports after layers are added
-                        // Wait a bit for layers to be fully loaded
+                        // Wait for tiles to load with longer delay
                         setTimeout(() => {
                             extractAirports();
-                        }, 500);
+                        }, 2000);  // Increased from 500ms to 2000ms
                     }
                 })
                 .catch(error => {
@@ -874,31 +877,52 @@
         }
 
         function extractAirports() {
-            // Query all features and extract airport codes from properties
+            // Extract airport codes by querying the tileset for unique airport_id values
+            // We need to query rendered features across all layers
             const airportSet = new Set();
 
-            // Query features from all layers
+            // Query all rendered features from all layers
             layers.forEach(layerId => {
                 try {
-                    const features = map.querySourceFeatures('tileset', {
-                        sourceLayer: layerId
-                    });
+                    // Query rendered features (visible in viewport and loaded tiles)
+                    const features = map.queryRenderedFeatures({ layers: [
+                        `${layerId}-fill`,
+                        `${layerId}-line`, 
+                        `${layerId}-circle`
+                    ]});
                     
                     features.forEach(feature => {
                         const props = feature.properties;
                         // Look for airport identifier in properties
                         if (props.airport_id) {
                             airportSet.add(props.airport_id.toUpperCase());
-                        } else if (props.airport) {
-                            airportSet.add(props.airport.toUpperCase());
-                        } else if (props.code) {
-                            airportSet.add(props.code.toUpperCase());
                         }
                     });
                 } catch (e) {
                     console.log('Could not query layer:', layerId, e);
                 }
             });
+
+            // If no airports found from rendered features, try to extract from source features
+            if (airportSet.size === 0) {
+                console.log('No airports found in rendered features, trying source features...');
+                layers.forEach(layerId => {
+                    try {
+                        const features = map.querySourceFeatures('tileset', {
+                            sourceLayer: layerId
+                        });
+                        
+                        features.forEach(feature => {
+                            const props = feature.properties;
+                            if (props.airport_id) {
+                                airportSet.add(props.airport_id.toUpperCase());
+                            }
+                        });
+                    } catch (e) {
+                        console.log('Could not query source layer:', layerId, e);
+                    }
+                });
+            }
 
             airports = Array.from(airportSet).sort();
             console.log('Extracted airports:', airports);
@@ -938,19 +962,29 @@
         }
 
         function flyToAirport(code) {
-            // Find all features for this airport
+            // Find all features for this airport by querying for airport_id property
             const features = [];
+            
             layers.forEach(layerId => {
-                if (layerId.startsWith(code + '-') || layerId.startsWith(code + '_')) {
+                try {
+                    // Query all source features from this layer
                     const layerFeatures = map.querySourceFeatures('tileset', {
                         sourceLayer: layerId
                     });
-                    features.push(...layerFeatures);
+                    
+                    // Filter features that match this airport code
+                    const airportFeatures = layerFeatures.filter(f => 
+                        f.properties && f.properties.airport_id === code
+                    );
+                    
+                    features.push(...airportFeatures);
+                } catch (e) {
+                    console.log('Could not query layer:', layerId, e);
                 }
             });
 
             if (features.length === 0) {
-                showToast('Info', `No features found for ${code}`, 'warning');
+                showToast('Info', `No features found for ${code}. Try zooming in first.`, 'warning');
                 return;
             }
 
@@ -963,6 +997,10 @@
                     feature.geometry.coordinates.forEach(coord => bounds.extend(coord));
                 } else if (feature.geometry.type === 'Polygon') {
                     feature.geometry.coordinates[0].forEach(coord => bounds.extend(coord));
+                } else if (feature.geometry.type === 'MultiPolygon') {
+                    feature.geometry.coordinates.forEach(polygon => {
+                        polygon[0].forEach(coord => bounds.extend(coord));
+                    });
                 }
             });
 
