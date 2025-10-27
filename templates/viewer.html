@@ -766,6 +766,10 @@
                 document.getElementById('configure-btn').style.display = 'inline-flex';
                 document.getElementById('change-tileset-btn').style.display = 'none';
                 document.getElementById('commit-btn').style.display = 'none';
+                
+                // Enable/disable required fields
+                document.getElementById('production-tileset-id').required = true;
+                document.getElementById('confirm-checkbox').required = false;
             } else {
                 // Subsequent times - confirm
                 document.getElementById('production-description').textContent = 'Review and confirm your deployment.';
@@ -775,6 +779,10 @@
                 document.getElementById('configure-btn').style.display = 'none';
                 document.getElementById('change-tileset-btn').style.display = 'inline-flex';
                 document.getElementById('commit-btn').style.display = 'inline-flex';
+                
+                // Enable/disable required fields
+                document.getElementById('production-tileset-id').required = false;
+                document.getElementById('confirm-checkbox').required = true;
             }
             
             document.getElementById('production-modal').classList.add('active');
@@ -793,18 +801,27 @@
             document.getElementById('change-tileset-btn').style.display = 'none';
             document.getElementById('commit-btn').style.display = 'none';
             
+            // Enable/disable required fields
+            document.getElementById('production-tileset-id').required = true;
+            document.getElementById('confirm-checkbox').required = false;
+            
             const currentId = localStorage.getItem('production_tileset_id');
             if (currentId) {
                 document.getElementById('production-tileset-id').value = currentId;
             }
         }
 
-        async function handleProductionSubmit(e) {
+        function handleProductionSubmit(e) {
             e.preventDefault();
+            console.log('handleProductionSubmit called');
 
             const productionTilesetId = localStorage.getItem('production_tileset_id');
+            const configureVisible = document.getElementById('production-configure').style.display !== 'none';
+            
+            console.log('productionTilesetId:', productionTilesetId);
+            console.log('configureVisible:', configureVisible);
 
-            if (!productionTilesetId || document.getElementById('production-configure').style.display !== 'none') {
+            if (!productionTilesetId || configureVisible) {
                 // Save configuration
                 const newId = document.getElementById('production-tileset-id').value.trim();
                 
