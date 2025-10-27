@@ -89,19 +89,21 @@ def upload_and_process():
                     "error": "No .geojson files found in the ZIP archive"
                 }), 400
 
-            # Step 2: Group GeoJSON files by type (suffix after dash)
-            # Example: e16-rwy.geojson and IGN-rwy.geojson both go into 'rwy' layer
+            # Step 2: Group GeoJSON files by type (suffix after dash or underscore)
+            # Example: e16-rwy.geojson, IGN-rwy.geojson, goo_rwy.geojson all go into 'rwy' layer
             from collections import defaultdict
             files_by_type = defaultdict(list)
             
             for geojson_file in geojson_files:
-                filename = geojson_file.stem  # e.g., "e16-rwy" or "IGN-rwy"
+                filename = geojson_file.stem  # e.g., "e16-rwy", "IGN-rwy", or "goo_aim"
                 
-                # Extract the type (part after the last dash)
-                if '-' in filename:
-                    layer_type = filename.split('-')[-1]  # e.g., "rwy"
+                # Extract the type (part after the last dash or underscore)
+                # Normalize by replacing underscores with dashes
+                if '-' in filename or '_' in filename:
+                    normalized = filename.replace('_', '-')
+                    layer_type = normalized.split('-')[-1]  # e.g., "rwy", "aim"
                 else:
-                    # If no dash, use the whole filename as the type
+                    # If no separator, use the whole filename as the type
                     layer_type = filename
                 
                 files_by_type[layer_type].append(geojson_file)

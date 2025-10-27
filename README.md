@@ -5,18 +5,27 @@ A web application that converts ZIP archives of GeoJSON files into a single MBTi
 ## Features
 
 - **Batch Conversion**: Upload a ZIP file containing multiple GeoJSON files
-- **Automatic Layer Creation**: Each GeoJSON file becomes a separate layer in the final MBTiles
+- **Smart Layer Grouping**: Files are grouped by type suffix (e.g., all `-rwy` files merge into one "rwy" layer)
 - **Mapbox Integration**: Optionally upload the result directly to your Mapbox account
 - **Production Ready**: Built with Docker and designed for deployment on Railway
 
 ## How It Works
 
 1. User uploads a ZIP file containing `.geojson` files
-2. The application extracts and processes each GeoJSON file using `tippecanoe`
-3. Individual MBTiles files are merged into a single file using `tile-join`
-4. The result is either:
+2. Files are automatically grouped by type (based on filename suffix after dash)
+3. Each type is processed into a unified layer using `tippecanoe`
+4. All layers are merged into a single MBTiles file using `tile-join`
+5. The result is either:
    - Downloaded directly to the user's computer, or
    - Uploaded automatically to Mapbox (if credentials are provided)
+
+### Layer Grouping
+
+Files are intelligently grouped by their type suffix. For example:
+- `e16-rwy.geojson` and `IGN-rwy.geojson` → merged into **"rwy" layer**
+- `e16-taxiway.geojson` and `IGN-taxiway.geojson` → merged into **"taxiway" layer**
+
+See [LAYER_GROUPING.md](LAYER_GROUPING.md) for detailed documentation.
 
 ## Technology Stack
 

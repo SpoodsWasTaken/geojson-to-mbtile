@@ -5,164 +5,244 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GeoJSON to MBTiles Converter</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100..900;1,100..900&display=swap');
+        :root {
+            --background: 0 0% 3.9%;
+            --foreground: 0 0% 98%;
+            --card: 0 0% 3.9%;
+            --card-foreground: 0 0% 98%;
+            --popover: 0 0% 3.9%;
+            --popover-foreground: 0 0% 98%;
+            --primary: 0 0% 98%;
+            --primary-foreground: 0 0% 9%;
+            --secondary: 0 0% 14.9%;
+            --secondary-foreground: 0 0% 98%;
+            --muted: 0 0% 14.9%;
+            --muted-foreground: 0 0% 63.9%;
+            --accent: 0 0% 14.9%;
+            --accent-foreground: 0 0% 98%;
+            --destructive: 0 62.8% 30.6%;
+            --destructive-foreground: 0 0% 98%;
+            --border: 0 0% 14.9%;
+            --input: 0 0% 14.9%;
+            --ring: 0 0% 83.1%;
+        }
+
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
         }
-        body { 
-            font-family: "Roboto", sans-serif;
-            background: linear-gradient(135deg, #252525 0%, #100b14 100%);
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+            background-color: hsl(var(--background));
+            color: hsl(var(--foreground));
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 20px;
+            padding: 2rem;
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
         }
-        .container { 
-            background: white;
-            border-radius: 12px;
-            padding: 40px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            max-width: 650px;
+
+        .container {
+            background-color: hsl(var(--card));
+            border: 1px solid hsl(var(--border));
+            border-radius: 0.5rem;
+            padding: 2.5rem;
+            max-width: 42rem;
             width: 100%;
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
         }
+
         h1 {
-            color: #333;
-            margin-bottom: 10px;
-            font-size: 28px;
-        }
-        .subtitle {
-            color: #666;
-            margin-bottom: 30px;
-            font-size: 14px;
-            line-height: 1.6;
-        }
-        .form-group {
-            margin-bottom: 20px;
-        }
-        label { 
-            display: block;
+            font-size: 1.875rem;
             font-weight: 600;
-            color: #333;
-            margin-bottom: 8px;
-            font-size: 14px;
+            letter-spacing: -0.025em;
+            margin-bottom: 0.5rem;
+            color: hsl(var(--foreground));
         }
+
+        .subtitle {
+            color: hsl(var(--muted-foreground));
+            margin-bottom: 2rem;
+            font-size: 0.875rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+            color: hsl(var(--foreground));
+        }
+
         input[type="text"],
         input[type="password"],
         input[type="file"],
         select {
             width: 100%;
-            padding: 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 6px;
-            font-size: 14px;
-            transition: border-color 0.3s;
+            padding: 0.625rem 0.75rem;
+            background-color: hsl(var(--background));
+            border: 1px solid hsl(var(--input));
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            color: hsl(var(--foreground));
+            transition: all 0.2s;
         }
+
         input[type="text"]:focus,
         input[type="password"]:focus,
         input[type="file"]:focus,
         select:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: hsl(var(--ring));
+            box-shadow: 0 0 0 3px hsl(var(--ring) / 0.1);
         }
-        input[type="radio"] {
-            margin-right: 8px;
+
+        input[type="file"]::file-selector-button {
+            background-color: hsl(var(--secondary));
+            color: hsl(var(--secondary-foreground));
+            border: none;
+            padding: 0.375rem 0.75rem;
+            border-radius: 0.25rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            margin-right: 0.75rem;
+            transition: background-color 0.2s;
         }
+
+        input[type="file"]::file-selector-button:hover {
+            background-color: hsl(var(--secondary) / 0.8);
+        }
+
+        select {
+            cursor: pointer;
+        }
+
         .radio-group {
             display: flex;
             flex-direction: column;
-            gap: 12px;
-            margin-top: 10px;
+            gap: 0.5rem;
         }
+
         .radio-option {
             display: flex;
             align-items: center;
-            padding: 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 6px;
+            padding: 0.875rem;
+            border: 1px solid hsl(var(--border));
+            border-radius: 0.375rem;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: all 0.2s;
         }
+
         .radio-option:hover {
-            border-color: #667eea;
-            background: #f8f9ff;
+            background-color: hsl(var(--accent));
+            border-color: hsl(var(--ring));
         }
-        .radio-option input[type="radio"]:checked + .radio-label {
-            color: #667eea;
-            font-weight: 600;
+
+        .radio-option input[type="radio"] {
+            width: 1rem;
+            height: 1rem;
+            margin-right: 0.75rem;
+            cursor: pointer;
+            accent-color: hsl(var(--primary));
         }
+
         .radio-label {
             flex: 1;
             cursor: pointer;
+            font-size: 0.875rem;
         }
+
         input[type="submit"] {
             width: 100%;
-            padding: 14px;
-            background: linear-gradient(135deg, #252525 0%, #100b14 100%);
-            color: white;
+            padding: 0.625rem 1rem;
+            background-color: hsl(var(--primary));
+            color: hsl(var(--primary-foreground));
             border: none;
-            border-radius: 6px;
-            font-size: 16px;
-            font-weight: 600;
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            font-weight: 500;
             cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
+            transition: all 0.2s;
         }
+
         input[type="submit"]:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+            background-color: hsl(var(--primary) / 0.9);
         }
+
         input[type="submit"]:active {
-            transform: translateY(0);
+            transform: scale(0.98);
         }
+
         .help-text {
-            font-size: 12px;
-            color: #888;
-            margin-top: 5px;
+            font-size: 0.75rem;
+            color: hsl(var(--muted-foreground));
+            margin-top: 0.375rem;
         }
+
         .divider {
             height: 1px;
-            background: #e0e0e0;
-            margin: 30px 0;
+            background-color: hsl(var(--border));
+            margin: 2rem 0;
         }
-        .option-section {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
+
+        .section {
+            background-color: hsl(var(--muted) / 0.3);
+            padding: 1.25rem;
+            border-radius: 0.375rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid hsl(var(--border));
         }
-        .option-header {
-            font-weight: 600;
-            color: #333;
-            margin-bottom: 15px;
-            font-size: 16px;
+
+        .section-header {
+            font-weight: 500;
+            margin-bottom: 1rem;
+            font-size: 0.875rem;
+            color: hsl(var(--foreground));
         }
+
         .conditional-fields {
-            margin-top: 15px;
-            padding-top: 15px;
-            border-top: 1px solid #e0e0e0;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid hsl(var(--border));
         }
+
         #loading {
             display: none;
             text-align: center;
-            padding: 20px;
+            padding: 2rem;
         }
+
         .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #667eea;
+            border: 3px solid hsl(var(--border));
+            border-top: 3px solid hsl(var(--primary));
             border-radius: 50%;
-            width: 40px;
-            height: 40px;
+            width: 2.5rem;
+            height: 2.5rem;
             animation: spin 1s linear infinite;
-            margin: 0 auto 15px;
+            margin: 0 auto 1rem;
         }
+
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
         .hidden {
             display: none;
+        }
+
+        #loading_message {
+            color: hsl(var(--muted-foreground));
+            font-size: 0.875rem;
         }
     </style>
 </head>
@@ -173,32 +253,32 @@
         
         <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data">
             <div class="form-group">
-                <label for="file">GeoJSON ZIP File *</label>
+                <label for="file">GeoJSON ZIP File</label>
                 <input type="file" name="file" id="file" accept=".zip" required>
-                <div class="help-text">Select a .zip file containing your .geojson files (named as [id]-[type].geojson)</div>
+                <div class="help-text">Select a .zip file containing your .geojson files (named as [id]-[type].geojson or [id]_[type].geojson)</div>
             </div>
 
             <div class="divider"></div>
 
-            <div class="option-section">
-                <div class="option-header">📤 Output Destination</div>
+            <div class="section">
+                <div class="section-header">Output Destination</div>
                 
                 <div class="radio-group">
                     <label class="radio-option">
                         <input type="radio" name="output_mode" value="download" id="mode_download" checked>
-                        <span class="radio-label">💾 Download MBTiles file to my computer</span>
+                        <span class="radio-label">Download MBTiles file to my computer</span>
                     </label>
                     
                     <label class="radio-option">
                         <input type="radio" name="output_mode" value="mapbox" id="mode_mapbox">
-                        <span class="radio-label">🌐 Update Mapbox tileset</span>
+                        <span class="radio-label">Update Mapbox tileset</span>
                     </label>
                 </div>
 
                 <div id="mapbox_fields" class="conditional-fields hidden">
                     <div class="form-group">
-                        <label for="tileset_id">Mapbox Tileset ID *</label>
-                        <input type="text" name="tileset_id" id="tileset_id" value="ericbutton.staging-9r4spd">
+                        <label for="tileset_id">Mapbox Tileset ID</label>
+                        <input type="text" name="tileset_id" id="tileset_id" value="ericbutton.staging-9r4spd" placeholder="username.tileset-name">
                         <div class="help-text">Format: username.tileset-name (saved for next time)</div>
                     </div>
 
@@ -212,7 +292,7 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="mapbox_token">Mapbox Access Token *</label>
+                        <label for="mapbox_token">Mapbox Access Token</label>
                         <input type="password" name="mapbox_token" id="mapbox_token" placeholder="sk.xxxx...">
                         <div class="help-text">Secret token with uploads:write and tilesets:write scopes</div>
                     </div>
