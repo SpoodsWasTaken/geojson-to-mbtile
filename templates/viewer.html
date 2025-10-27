@@ -480,10 +480,10 @@
         
         // Layer colors (multicolored!)
         const LAYER_COLORS = {
-            'rwy': '#FF6B6B',      // Red for runways
-            'twy': '#4ECDC4',      // Teal for taxiways
+            'rwy': '#CC0000',      // Dark red for runways
+            'twy': '#FFD700',      // Yellow for taxiways
             'aim': '#FFE66D',      // Yellow for aim points
-            'pave': '#95E1D3',     // Light teal for pavement
+            'pave': '#2C5F5F',     // Dark teal for pavement
             'grass': '#7FBF7F',    // Green for grass
             'threshold': '#FF8C42', // Orange for thresholds
             'rwcl': '#A8E6CF',     // Light green for runway centerline
@@ -497,7 +497,7 @@
         
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('Initializing Tileset Viewer v3.9.0...');
+            console.log('Initializing Tileset Viewer v3.10.0...');
             
             currentPublicToken = localStorage.getItem('mapbox_public_token') || MAPBOX_PUBLIC_TOKEN;
             
@@ -848,12 +848,35 @@
             closeProductionModal();
             showLoading('Pushing to Production', 'This may take several minutes...');
 
-            // This would call a backend endpoint to handle the production push
-            // For now, simulate the process
-            setTimeout(() => {
+            // Call backend API to push to production
+            fetch('/api/push-to-production', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    staging_tileset_id: TILESET_ID,
+                    production_tileset_id: productionTilesetId,
+                    mode: updateMode
+                })
+            })
+            .then(response => response.json())
+            .then(result => {
                 hideLoading();
-                showToast('Success', `Successfully pushed to production (${updateMode} mode)`, 'success');
-            }, 3000);
+                
+                if (result.success) {
+                    showToast('Success', result.message, 'success');
+                    console.log('Production push successful:', result);
+                } else {
+                    showToast('Error', result.error || 'Failed to push to production', 'error');
+                    console.error('Production push failed:', result);
+                }
+            })
+            .catch(error => {
+                hideLoading();
+                showToast('Error', 'Network error: ' + error.message, 'error');
+                console.error('Production push error:', error);
+            });
         }
 
         // Loading functions
