@@ -5,14 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GeoJSON to MBTiles Converter</title>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100..900;1,100..900&display=swap');
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
         }
         body { 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: "Roboto", sans-serif;
+            background: linear-gradient(135deg, #252525 0%, #100b14 100%);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -24,7 +25,7 @@
             border-radius: 12px;
             padding: 40px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            max-width: 600px;
+            max-width: 650px;
             width: 100%;
         }
         h1 {
@@ -50,7 +51,8 @@
         }
         input[type="text"],
         input[type="password"],
-        input[type="file"] {
+        input[type="file"],
+        select {
             width: 100%;
             padding: 12px;
             border: 2px solid #e0e0e0;
@@ -60,14 +62,45 @@
         }
         input[type="text"]:focus,
         input[type="password"]:focus,
-        input[type="file"]:focus {
+        input[type="file"]:focus,
+        select:focus {
             outline: none;
             border-color: #667eea;
+        }
+        input[type="radio"] {
+            margin-right: 8px;
+        }
+        .radio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 10px;
+        }
+        .radio-option {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .radio-option:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+        .radio-option input[type="radio"]:checked + .radio-label {
+            color: #667eea;
+            font-weight: 600;
+        }
+        .radio-label {
+            flex: 1;
+            cursor: pointer;
         }
         input[type="submit"] {
             width: 100%;
             padding: 14px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #252525 0%, #100b14 100%);
             color: white;
             border: none;
             border-radius: 6px;
@@ -105,6 +138,11 @@
             margin-bottom: 15px;
             font-size: 16px;
         }
+        .conditional-fields {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #e0e0e0;
+        }
         #loading {
             display: none;
             text-align: center;
@@ -123,41 +161,61 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        .hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🗺️ GeoJSON to MBTiles</h1>
-        <p class="subtitle">Convert a ZIP of GeoJSON files into a single MBTiles file. Optionally upload directly to your Mapbox account.</p>
+        <h1>GeoJSON to MBTiles</h1>
+        <p class="subtitle">Convert GeoJSON files to MBTiles with smart layer grouping. Download locally or update your Mapbox tileset.</p>
         
         <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data">
             <div class="form-group">
                 <label for="file">GeoJSON ZIP File *</label>
                 <input type="file" name="file" id="file" accept=".zip" required>
-                <div class="help-text">Select a .zip file containing your .geojson files</div>
+                <div class="help-text">Select a .zip file containing your .geojson files (named as [id]-[type].geojson)</div>
             </div>
 
             <div class="divider"></div>
 
             <div class="option-section">
-                <div class="option-header">📤 Mapbox Upload (Optional)</div>
-                <p class="help-text" style="margin-bottom: 15px;">Leave these fields empty to download the MBTiles file instead.</p>
+                <div class="option-header">📤 Output Destination</div>
                 
-                <div class="form-group">
-                    <label for="mapbox_token">Mapbox Secret Token</label>
-                    <input type="password" name="mapbox_token" id="mapbox_token" placeholder="sk.xxxx...">
-                    <div class="help-text">Your Mapbox secret access token with uploads:write scope</div>
+                <div class="radio-group">
+                    <label class="radio-option">
+                        <input type="radio" name="output_mode" value="download" id="mode_download" checked>
+                        <span class="radio-label">💾 Download MBTiles file to my computer</span>
+                    </label>
+                    
+                    <label class="radio-option">
+                        <input type="radio" name="output_mode" value="mapbox" id="mode_mapbox">
+                        <span class="radio-label">🌐 Update Mapbox tileset</span>
+                    </label>
                 </div>
 
-                <div class="form-group">
-                    <label for="mapbox_username">Mapbox Username</label>
-                    <input type="text" name="mapbox_username" id="mapbox_username" placeholder="your-username">
-                </div>
+                <div id="mapbox_fields" class="conditional-fields hidden">
+                    <div class="form-group">
+                        <label for="tileset_id">Mapbox Tileset ID *</label>
+                        <input type="text" name="tileset_id" id="tileset_id" value="ericbutton.staging-9r4spd">
+                        <div class="help-text">Format: username.tileset-name (saved for next time)</div>
+                    </div>
 
-                <div class="form-group">
-                    <label for="tileset_name">Tileset Name</label>
-                    <input type="text" name="tileset_name" id="tileset_name" placeholder="my-awesome-tileset">
-                    <div class="help-text">A friendly name for your new tileset</div>
+                    <div class="form-group">
+                        <label for="update_mode">Update Mode</label>
+                        <select name="update_mode" id="update_mode">
+                            <option value="append" selected>Append - Add new data to existing tileset (cumulative)</option>
+                            <option value="replace">Replace - Overwrite entire tileset with new data</option>
+                        </select>
+                        <div class="help-text">Append keeps existing features, Replace starts fresh</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="mapbox_token">Mapbox Access Token *</label>
+                        <input type="password" name="mapbox_token" id="mapbox_token" placeholder="sk.xxxx...">
+                        <div class="help-text">Secret token with uploads:write and tilesets:write scopes</div>
+                    </div>
                 </div>
             </div>
 
@@ -166,12 +224,56 @@
 
         <div id="loading">
             <div class="spinner"></div>
-            <p>Processing your files... This may take a few minutes.</p>
+            <p id="loading_message">Processing your files... This may take a few minutes.</p>
         </div>
     </div>
 
     <script>
+        // Load saved tileset ID from localStorage
+        window.addEventListener('DOMContentLoaded', function() {
+            const savedTilesetId = localStorage.getItem('mapbox_tileset_id');
+            if (savedTilesetId) {
+                document.getElementById('tileset_id').value = savedTilesetId;
+            }
+        });
+
+        // Toggle Mapbox fields visibility
+        document.querySelectorAll('input[name="output_mode"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                const mapboxFields = document.getElementById('mapbox_fields');
+                const mapboxToken = document.getElementById('mapbox_token');
+                
+                if (this.value === 'mapbox') {
+                    mapboxFields.classList.remove('hidden');
+                    mapboxToken.required = true;
+                } else {
+                    mapboxFields.classList.add('hidden');
+                    mapboxToken.required = false;
+                }
+            });
+        });
+
+        // Save tileset ID to localStorage when changed
+        document.getElementById('tileset_id').addEventListener('change', function() {
+            localStorage.setItem('mapbox_tileset_id', this.value);
+        });
+
+        // Form submission handling
         document.getElementById('uploadForm').addEventListener('submit', function() {
+            const outputMode = document.querySelector('input[name="output_mode"]:checked').value;
+            const loadingMessage = document.getElementById('loading_message');
+            
+            if (outputMode === 'mapbox') {
+                const updateMode = document.getElementById('update_mode').value;
+                if (updateMode === 'append') {
+                    loadingMessage.textContent = 'Downloading existing tileset, merging with new data, and uploading... This may take several minutes.';
+                } else {
+                    loadingMessage.textContent = 'Replacing tileset with new data... This may take a few minutes.';
+                }
+            } else {
+                loadingMessage.textContent = 'Processing your files... This may take a few minutes.';
+            }
+            
             document.getElementById('uploadForm').style.display = 'none';
             document.getElementById('loading').style.display = 'block';
         });
