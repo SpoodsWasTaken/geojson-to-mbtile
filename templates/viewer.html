@@ -111,6 +111,80 @@
             margin-bottom: 0.75rem;
             color: hsl(var(--foreground));
         }
+        
+        .controls-section {
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid hsl(var(--border));
+        }
+        
+        .controls-section:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+        
+        .style-option {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem;
+            margin-bottom: 0.5rem;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .style-option:hover {
+            background-color: hsl(var(--secondary) / 0.5);
+        }
+        
+        .style-option input[type="radio"] {
+            width: 1rem;
+            height: 1rem;
+            margin-right: 0.5rem;
+            cursor: pointer;
+            accent-color: hsl(var(--primary));
+        }
+        
+        .style-option label {
+            flex: 1;
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+        
+        .style-input {
+            width: 100%;
+            padding: 0.5rem;
+            margin-top: 0.5rem;
+            background-color: hsl(var(--background));
+            border: 1px solid hsl(var(--border));
+            border-radius: 0.25rem;
+            color: hsl(var(--foreground));
+            font-size: 0.75rem;
+            font-family: monospace;
+        }
+        
+        .style-input:focus {
+            outline: none;
+            border-color: hsl(var(--primary));
+        }
+        
+        .style-button {
+            width: 100%;
+            padding: 0.5rem;
+            margin-top: 0.5rem;
+            background-color: hsl(var(--secondary));
+            color: hsl(var(--secondary-foreground));
+            border: none;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .style-button:hover {
+            background-color: hsl(var(--secondary) / 0.8);
+        }
 
         .layer-toggle {
             display: flex;
@@ -229,9 +303,32 @@
         <div id="map"></div>
 
         <div class="controls">
-            <div class="controls-title">Layers</div>
-            <div id="layer-list">
-                <!-- Layer toggles will be populated by JavaScript -->
+            <div class="controls-section">
+                <div class="controls-title">Map Style</div>
+                
+                <div class="style-option">
+                    <input type="radio" name="map_style" id="style_dark" value="dark" checked>
+                    <label for="style_dark">Dark (Default)</label>
+                </div>
+                
+                <div class="style-option">
+                    <input type="radio" name="map_style" id="style_custom" value="custom">
+                    <label for="style_custom">Custom Style</label>
+                </div>
+                
+                <div id="custom_style_config" style="display: none;">
+                    <input type="text" id="custom_style_url" class="style-input" 
+                           placeholder="mapbox://styles/username/style-id"
+                           value="mapbox://styles/ericbutton/cmh27faz3002o01rf7r040hag">
+                    <button class="style-button" onclick="applyCustomStyle()">Apply Style</button>
+                </div>
+            </div>
+            
+            <div class="controls-section">
+                <div class="controls-title">Layers</div>
+                <div id="layer-list">
+                    <!-- Layer toggles will be populated by JavaScript -->
+                </div>
             </div>
         </div>
 
@@ -268,10 +365,29 @@
 
         // Initialize map
         mapboxgl.accessToken = MAPBOX_PUBLIC_TOKEN;
+        
+        // Load saved custom style URL
+        const savedCustomStyle = localStorage.getItem('custom_style_url');
+        if (savedCustomStyle) {
+            document.getElementById('custom_style_url').value = savedCustomStyle;
+        }
+        
+        // Load saved style preference
+        const savedStylePref = localStorage.getItem('map_style_preference') || 'dark';
+        let initialStyle = 'mapbox://styles/mapbox/dark-v11';
+        
+        if (savedStylePref === 'custom') {
+            const customStyleUrl = document.getElementById('custom_style_url').value;
+            if (customStyleUrl) {
+                initialStyle = customStyleUrl;
+                document.getElementById('style_custom').checked = true;
+                document.getElementById('custom_style_config').style.display = 'block';
+            }
+        }
 
         const map = new mapboxgl.Map({
             container: 'map',
-            style: 'mapbox://styles/mapbox/dark-v11',
+            style: initialStyle,
             center: [-95, 40], // Center of US
             zoom: 4
         });
@@ -470,6 +586,73 @@
                 localStorage.removeItem('mapbox_public_token');
                 location.reload();
             }
+        }
+        
+        // Style switching functionality
+        document.querySelectorAll('input[name="map_style"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                const customConfig = document.getElementById('custom_style_config');
+                
+                if (this.value === 'custom') {
+                    customConfig.style.display = 'block';
+                } else {
+                    customConfig.style.display = 'none';
+                    // Switch to dark style
+                    map.setStyle('mapbox://styles/mapbox/dark-v11');
+                    localStorage.setItem('map_style_preference', 'dark');
+                }
+            });
+        });
+        
+        function applyCustomStyle() {
+            const customStyleUrl = document.getElementById('custom_style_url').value.trim();
+            
+            if (!customStyleUrl) {
+                alert('Please enter a style URL');
+                return;
+            }
+            
+            // Validate format
+            if (!customStyleUrl.startsWith('mapbox://styles/')) {
+                alert('Style URL must start with "mapbox://styles/"');
+                return;
+            }
+            
+            // Save to localStorage
+            localStorage.setItem('custom_style_url', customStyleUrl);
+            localStorage.setItem('map_style_preference', 'custom');
+            
+            // Apply the style
+            map.setStyle(customStyleUrl);
+            
+            // Re-add tileset source and layers after style loads
+            map.once('style.load', function() {
+                // Re-add the tileset source
+                map.addSource('custom-tileset', {
+                    type: 'vector',
+                    url: `mapbox://${TILESET_ID}`
+                });
+                
+                // Re-fetch and add layers
+                fetch(`https://api.mapbox.com/v4/${TILESET_ID}.json?access_token=${MAPBOX_PUBLIC_TOKEN}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        const layers = data.vector_layers || [];
+                        
+                        layers.forEach((layer) => {
+                            const layerId = layer.id;
+                            const color = layerColors[layerId] || '#ffffff';
+                            
+                            // Only add if layer is active
+                            if (activeLayers.has(layerId)) {
+                                addLayerToMap(layerId, color);
+                            }
+                        });
+                    })
+                    .catch(error => {
+                        console.error('Error reloading layers:', error);
+                    });
+            });
         }
     </script>
 </body>
