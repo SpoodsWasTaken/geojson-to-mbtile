@@ -6,6 +6,11 @@
     <title>Tileset Viewer</title>
     <link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
     <script src='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'></script>
+    
+    <!-- Mapbox Geocoder -->
+    <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v5.0.0/mapbox-gl-geocoder.min.js"></script>
+    <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v5.0.0/mapbox-gl-geocoder.css" type="text/css">
+    
     <style>
         :root {
             --background: 0 0% 10%;
@@ -29,8 +34,6 @@
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background-color: hsl(var(--background));
-            background-image: radial-gradient(circle, hsla(0, 0%, 30%, 0.3) 1px, transparent 1px);
-            background-size: 20px 20px;
             color: hsl(var(--foreground));
             height: 100vh;
             overflow: hidden;
@@ -43,7 +46,6 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            flex-wrap: wrap;
             gap: 1rem;
         }
 
@@ -55,7 +57,6 @@
         .header-actions {
             display: flex;
             gap: 0.75rem;
-            flex-wrap: wrap;
         }
 
         .button {
@@ -66,9 +67,6 @@
             border: none;
             cursor: pointer;
             transition: all 0.2s;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
         }
 
         .button-primary {
@@ -76,26 +74,9 @@
             color: hsl(var(--background));
         }
 
-        .button-primary:hover {
-            opacity: 0.9;
-        }
-
         .button-secondary {
             background-color: hsl(var(--secondary));
             color: hsl(var(--foreground));
-        }
-
-        .button-secondary:hover {
-            background-color: hsl(var(--secondary) / 0.8);
-        }
-
-        .button-destructive {
-            background-color: hsl(var(--destructive));
-            color: hsl(var(--foreground));
-        }
-
-        .button-destructive:hover {
-            background-color: hsl(var(--destructive) / 0.9);
         }
 
         .main-container {
@@ -104,21 +85,15 @@
         }
 
         .sidebar {
-            width: 320px;
+            width: 300px;
             background-color: hsl(var(--card));
             border-right: 1px solid hsl(var(--border));
             overflow-y: auto;
-            display: flex;
-            flex-direction: column;
         }
 
         .sidebar-section {
             border-bottom: 1px solid hsl(var(--border));
             padding: 1.5rem;
-        }
-
-        .sidebar-section:last-child {
-            border-bottom: none;
         }
 
         .section-title {
@@ -128,6 +103,9 @@
             text-transform: uppercase;
             letter-spacing: 0.05em;
             color: hsl(var(--muted-foreground));
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
         .map-container {
@@ -138,84 +116,6 @@
         #map {
             width: 100%;
             height: 100%;
-        }
-
-        /* Style Selector */
-        .style-option {
-            display: flex;
-            align-items: center;
-            padding: 0.625rem;
-            border: 1px solid hsl(var(--border));
-            border-radius: 0.375rem;
-            cursor: pointer;
-            margin-bottom: 0.5rem;
-            transition: all 0.2s;
-        }
-
-        .style-option:hover {
-            background-color: hsl(var(--secondary) / 0.5);
-        }
-
-        .style-option input[type="radio"] {
-            margin-right: 0.75rem;
-            accent-color: hsl(var(--primary));
-        }
-
-        .style-custom-url {
-            margin-top: 0.5rem;
-            padding: 0.5rem;
-            background-color: hsl(var(--background));
-            border: 1px solid hsl(var(--border));
-            border-radius: 0.375rem;
-            width: 100%;
-            color: hsl(var(--foreground));
-            font-size: 0.75rem;
-            font-family: monospace;
-        }
-
-        .style-apply-btn {
-            margin-top: 0.5rem;
-            width: 100%;
-        }
-
-        /* Airport List */
-        .airport-list {
-            max-height: 300px;
-            overflow-y: auto;
-        }
-
-        .airport-item {
-            padding: 0.75rem;
-            border: 1px solid hsl(var(--border));
-            border-radius: 0.375rem;
-            margin-bottom: 0.5rem;
-            cursor: pointer;
-            transition: all 0.2s;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .airport-item:hover {
-            background-color: hsl(var(--secondary) / 0.5);
-            border-color: hsl(var(--primary));
-        }
-
-        .airport-code {
-            font-weight: 600;
-            font-size: 0.875rem;
-        }
-
-        .airport-count {
-            font-size: 0.75rem;
-            color: hsl(var(--muted-foreground));
-        }
-
-        .airport-list-empty {
-            text-align: center;
-            padding: 2rem 1rem;
-            color: hsl(var(--muted-foreground));
-            font-size: 0.875rem;
         }
 
         /* Layer Toggle */
@@ -248,130 +148,10 @@
             cursor: pointer;
         }
 
-        /* Popup fix */
-        .mapboxgl-popup-content {
-            background-color: white;
-            color: black !important;
-            padding: 1rem;
-            border-radius: 0.375rem;
-        }
-
-        .mapboxgl-popup-close-button {
-            color: black;
-        }
-
-        /* Modal */
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: rgb(0 0 0 / 0.8);
-            z-index: 9998;
-            align-items: center;
-            justify-content: center;
-            padding: 1rem;
-        }
-
-        .modal-overlay.active {
-            display: flex;
-        }
-
-        .modal {
-            background-color: hsl(var(--card));
-            border: 1px solid hsl(var(--border));
-            border-radius: 0.5rem;
-            padding: 2rem;
-            max-width: 32rem;
-            width: 100%;
-            box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
-        }
-
-        .modal-title {
-            font-size: 1.25rem;
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-        }
-
-        .modal-description {
-            color: hsl(var(--muted-foreground));
-            font-size: 0.875rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .form-group {
-            margin-bottom: 1.5rem;
-        }
-
-        label {
-            display: block;
-            font-weight: 500;
-            margin-bottom: 0.5rem;
-            font-size: 0.875rem;
-        }
-
-        input[type="text"],
-        input[type="password"],
-        select {
-            width: 100%;
-            padding: 0.625rem 0.75rem;
-            background-color: hsl(var(--background));
-            border: 1px solid hsl(var(--border));
-            border-radius: 0.375rem;
-            font-size: 0.875rem;
-            color: hsl(var(--foreground));
-        }
-
-        input:focus, select:focus {
-            outline: none;
-            border-color: hsl(var(--primary));
-        }
-
-        .help-text {
-            font-size: 0.75rem;
-            color: hsl(var(--muted-foreground));
-            margin-top: 0.25rem;
-        }
-
-        .warning-box {
-            background-color: hsl(var(--warning) / 0.1);
-            border: 1px solid hsl(var(--warning) / 0.3);
-            border-radius: 0.375rem;
-            padding: 1rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .warning-title {
-            font-weight: 600;
-            color: hsl(var(--warning));
-            margin-bottom: 0.5rem;
-            font-size: 0.875rem;
-        }
-
-        .warning-text {
-            font-size: 0.875rem;
-            color: hsl(var(--foreground));
-        }
-
-        .button-group {
-            display: flex;
-            gap: 0.75rem;
-            flex-wrap: wrap;
-        }
-
-        .checkbox-group {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            margin-bottom: 1rem;
-        }
-
-        .checkbox-group input[type="checkbox"] {
-            width: 1.25rem;
-            height: 1.25rem;
-            accent-color: hsl(var(--primary));
+        /* Geocoder styling */
+        .mapboxgl-ctrl-geocoder {
+            min-width: 300px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
         }
 
         /* Toast */
@@ -393,22 +173,16 @@
             padding: 1rem;
             box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
             animation: slideIn 0.3s ease-out;
+            transition: opacity 0.3s;
         }
 
         @keyframes slideIn {
-            from {
-                transform: translateX(100%);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
         }
 
         .toast-success { border-left: 4px solid hsl(var(--success)); }
         .toast-error { border-left: 4px solid hsl(var(--destructive)); }
-        .toast-warning { border-left: 4px solid hsl(var(--warning)); }
 
         .toast-title {
             font-weight: 600;
@@ -420,85 +194,12 @@
             font-size: 0.875rem;
             color: hsl(var(--muted-foreground));
         }
-
-        /* Loading */
-        .loading-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: rgb(0 0 0 / 0.9);
-            z-index: 10000;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .loading-overlay.active {
-            display: flex;
-        }
-
-        .loading-content {
-            text-align: center;
-        }
-
-        .loading-spinner {
-            width: 4rem;
-            height: 4rem;
-            border: 4px solid hsl(var(--border));
-            border-top-color: hsl(var(--primary));
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            margin: 0 auto 1rem;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        .loading-title {
-            font-size: 1.25rem;
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-        }
-
-        .loading-message {
-            color: hsl(var(--muted-foreground));
-            font-size: 0.875rem;
-        }
-
-        /* Responsive */
-        @media (max-width: 768px) {
-            .sidebar {
-                position: absolute;
-                left: -320px;
-                z-index: 100;
-                height: 100%;
-                transition: left 0.3s;
-            }
-
-            .sidebar.open {
-                left: 0;
-            }
-
-            .header-actions {
-                width: 100%;
-            }
-
-            .button {
-                flex: 1;
-            }
-        }
     </style>
 </head>
 <body>
     <div class="header">
         <div class="header-title">Tileset Viewer</div>
         <div class="header-actions">
-            <button class="button button-primary" id="push-production-btn">
-                Push to Production
-            </button>
             <button class="button button-secondary" onclick="window.location.href='/'">
                 Main Menu
             </button>
@@ -507,46 +208,16 @@
 
     <div class="main-container">
         <div class="sidebar">
-            <!-- Map Style Section -->
-            <div class="sidebar-section">
-                <div class="section-title">Map Style</div>
-                <div class="style-option">
-                    <input type="radio" id="style-dark" name="map-style" value="dark" checked>
-                    <label for="style-dark">Dark (Default)</label>
-                </div>
-                <div class="style-option">
-                    <input type="radio" id="style-custom" name="map-style" value="custom">
-                    <label for="style-custom">Custom Style</label>
-                </div>
-                <div id="custom-style-fields" style="display: none;">
-                    <input type="text" class="style-custom-url" id="custom-style-url" 
-                           placeholder="mapbox://styles/username/style-id"
-                           value="mapbox://styles/ericbutton/cmh27faz3002o01rf7r040hag">
-                    <button class="button button-primary style-apply-btn" onclick="applyCustomStyle()">
-                        Apply Style
-                    </button>
-                </div>
-            </div>
-
-            <!-- Airports Section -->
-            <div class="sidebar-section">
-                <div class="section-title" style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>Airports</span>
-                    <button onclick="extractAirportsFromMap()" class="button" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" title="Refresh airport list from visible features">Refresh</button>
-                </div>
-                <div class="airport-list" id="airport-list">
-                    <div class="airport-list-empty">Loading airports...</div>
-                </div>
-            </div>
-
             <!-- Layers Section -->
             <div class="sidebar-section">
-                <div class="section-title" style="display: flex; justify-content: space-between; align-items: center;">
+                <div class="section-title">
                     <span>Layers</span>
                     <button onclick="toggleAllLayers()" class="button" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Toggle All</button>
                 </div>
                 <div id="layer-list">
-                    <div class="airport-list-empty">Loading layers...</div>
+                    <div style="text-align: center; padding: 2rem 1rem; color: hsl(var(--muted-foreground)); font-size: 0.875rem;">
+                        Loading layers...
+                    </div>
                 </div>
             </div>
         </div>
@@ -556,192 +227,60 @@
         </div>
     </div>
 
-    <!-- Public Token Modal -->
-    <div class="modal-overlay" id="token-modal">
-        <div class="modal">
-            <div class="modal-title">Mapbox Public Token Required</div>
-            <div class="modal-description">
-                Please enter your Mapbox public token to view the map.
-            </div>
-            <form id="token-form">
-                <div class="form-group">
-                    <label for="public-token">Public Token</label>
-                    <input type="text" id="public-token" placeholder="pk.xxx..." required>
-                    <p class="help-text">Find your token at: https://account.mapbox.com/access-tokens/</p>
-                </div>
-                <div class="button-group">
-                    <button type="submit" class="button button-primary">Save Token</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Push to Production Modal -->
-    <div class="modal-overlay" id="production-modal">
-        <div class="modal">
-            <div class="modal-title">Push to Production</div>
-            <div class="modal-description" id="production-description">
-                Deploy your staging tileset to production.
-            </div>
-            
-            <form id="production-form">
-                <div id="production-configure" style="display: none;">
-                    <div class="form-group">
-                        <label for="production-tileset-id">Production Tileset ID</label>
-                        <input type="text" id="production-tileset-id" placeholder="username.production-tileset" required>
-                        <p class="help-text">This will be saved for future deployments</p>
-                    </div>
-                </div>
-
-                <div id="production-confirm" style="display: none;">
-                    <div class="warning-box">
-                        <div class="warning-title">⚠️ Warning</div>
-                        <div class="warning-text">
-                            You are about to modify the production tileset:<br>
-                            <strong id="confirm-tileset-name"></strong>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="production-mode">Update Mode</label>
-                        <select id="production-mode">
-                            <option value="replace">Replace - Overwrite entire tileset</option>
-                            <option value="append">Append - Merge with existing (smart deduplication)</option>
-                        </select>
-                    </div>
-
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="confirm-checkbox" required>
-                        <label for="confirm-checkbox">I understand this will modify production</label>
-                    </div>
-                </div>
-
-                <div class="button-group">
-                    <button type="button" class="button button-secondary" onclick="closeProductionModal()">
-                        Cancel
-                    </button>
-                    <button type="button" class="button button-secondary" id="change-tileset-btn" style="display: none;" onclick="changeProductionTileset()">
-                        Change Tileset
-                    </button>
-                    <button type="submit" class="button button-destructive" id="commit-btn" style="display: none;">
-                        Commit to Production
-                    </button>
-                    <button type="submit" class="button button-primary" id="configure-btn" style="display: none;">
-                        Save & Continue
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
     <!-- Toast Container -->
     <div class="toast-container" id="toast-container"></div>
 
-    <!-- Loading Overlay -->
-    <div class="loading-overlay" id="loading-overlay">
-        <div class="loading-content">
-            <div class="loading-spinner"></div>
-            <div class="loading-title" id="loading-title">Processing...</div>
-            <div class="loading-message" id="loading-message">Please wait</div>
-        </div>
-    </div>
-
-
     <script>
-        // ============================================================================
-        // CONFIGURATION
-        // ============================================================================
-        
+        // Configuration
         const TILESET_ID = '{{ tileset_id }}';
         const MAPBOX_PUBLIC_TOKEN = '{{ mapbox_public_token }}';
         
-        // ============================================================================
-        // STATE MANAGEMENT
-        // ============================================================================
-        
+        // State
         let map = null;
         let currentPublicToken = MAPBOX_PUBLIC_TOKEN;
-        let airports = [];
         let layers = [];
-        let layerVisibility = {};  // Track visibility state for each layer
+        let layerVisibility = {};
         
-        // ============================================================================
-        // INITIALIZATION
-        // ============================================================================
+        // Layer colors (multicolored!)
+        const LAYER_COLORS = {
+            'rwy': '#FF6B6B',      // Red for runways
+            'twy': '#4ECDC4',      // Teal for taxiways
+            'aim': '#FFE66D',      // Yellow for aim points
+            'pave': '#95E1D3',     // Light teal for pavement
+            'grass': '#7FBF7F',    // Green for grass
+            'threshold': '#FF8C42', // Orange for thresholds
+            'rwcl': '#A8E6CF',     // Light green for runway centerline
+            'rwyend': '#FF6F91',   // Pink for runway end
+            'num': '#C7CEEA',      // Lavender for numbers
+            'small': '#FFDAC1',    // Peach for small features
+            'arrow': '#B4F8C8',    // Mint for arrows
+            'chevron': '#FBE7C6',  // Beige for chevrons
+            'emas': '#A0C4FF'      // Light blue for EMAS
+        };
         
+        // Initialize
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('Initializing Tileset Viewer v3.8.0...');
-            console.log('Tileset ID:', TILESET_ID);
+            console.log('Initializing Tileset Viewer v3.9.0...');
             
-            // Setup event listeners
-            setupEventListeners();
-            
-            // Check for public token
             currentPublicToken = localStorage.getItem('mapbox_public_token') || MAPBOX_PUBLIC_TOKEN;
             
             if (!currentPublicToken) {
-                showTokenModal();
+                alert('Please set your Mapbox public token first');
+                window.location.href = '/';
                 return;
             }
             
-            // Set Mapbox access token
             mapboxgl.accessToken = currentPublicToken;
-            
-            // Initialize map
             initializeMap();
         });
-        
-        // ============================================================================
-        // EVENT LISTENERS
-        // ============================================================================
-        
-        function setupEventListeners() {
-            // Token form
-            document.getElementById('token-form').addEventListener('submit', handleTokenSubmit);
-            
-            // Production form
-            document.getElementById('production-form').addEventListener('submit', handleProductionSubmit);
-            
-            // Push to production button
-            document.getElementById('push-production-btn').addEventListener('click', showProductionModal);
-            
-            // Style radio buttons
-            document.querySelectorAll('input[name="map-style"]').forEach(radio => {
-                radio.addEventListener('change', handleStyleChange);
-            });
-        }
-        
-        // ============================================================================
-        // MAP INITIALIZATION
-        // ============================================================================
         
         function initializeMap() {
             console.log('Creating map...');
             
-            // Load saved style preference
-            const savedStyle = localStorage.getItem('map_style_preference') || 'dark';
-            const customStyleUrl = localStorage.getItem('custom_style_url') || '';
-            
-            // Set radio button
-            if (savedStyle === 'custom' && customStyleUrl) {
-                document.getElementById('style-custom').checked = true;
-                document.getElementById('custom-style-url').value = customStyleUrl;
-                document.getElementById('custom-style-fields').style.display = 'block';
-            } else {
-                document.getElementById('style-dark').checked = true;
-                document.getElementById('custom-style-fields').style.display = 'none';
-            }
-            
-            // Determine initial style URL
-            let initialStyleUrl = 'mapbox://styles/mapbox/dark-v11';
-            if (savedStyle === 'custom' && customStyleUrl) {
-                initialStyleUrl = customStyleUrl;
-            }
-            
-            // Create map
+            // Create map with dark style
             map = new mapboxgl.Map({
                 container: 'map',
-                style: initialStyleUrl,
+                style: 'mapbox://styles/mapbox/dark-v11',
                 center: [-98, 38],
                 zoom: 6
             });
@@ -749,16 +288,21 @@
             // Add navigation controls
             map.addControl(new mapboxgl.NavigationControl(), 'top-right');
             
+            // Add geocoder (search bar)
+            const geocoder = new MapboxGeocoder({
+                accessToken: mapboxgl.accessToken,
+                mapboxgl: mapboxgl,
+                marker: true,
+                placeholder: 'Search for places...'
+            });
+            map.addControl(geocoder, 'top-left');
+            
             // Wait for style to load, then add tileset layers
             map.on('style.load', function() {
                 console.log('Map style loaded');
                 addTilesetLayers();
             });
         }
-        
-        // ============================================================================
-        // TILESET LAYERS
-        // ============================================================================
         
         function addTilesetLayers() {
             console.log('Adding tileset layers...');
@@ -771,7 +315,7 @@
                 });
             }
             
-            // Fetch tileset metadata to get layers
+            // Fetch tileset metadata
             fetch(`https://api.mapbox.com/v4/${TILESET_ID}.json?secure&access_token=${currentPublicToken}`)
                 .then(response => response.json())
                 .then(data => {
@@ -779,106 +323,91 @@
                         layers = data.vector_layers.map(l => l.id);
                         console.log('Found layers:', layers);
                         
-                        // Load saved visibility states
                         loadLayerVisibility();
                         
-                        // Add each layer to map
                         layers.forEach(layerId => {
                             addLayerToMap(layerId);
                         });
                         
-                        // Render layer list UI
                         renderLayerList();
-                        
-                        // Load airports
-                        loadAirports();
                     }
                 })
                 .catch(error => {
                     console.error('Error loading tileset metadata:', error);
-                    showToast('Error', 'Failed to load tileset metadata', 'error');
+                    showToast('Error', 'Failed to load tileset', 'error');
                 });
         }
         
         function addLayerToMap(layerId) {
-            // Remove existing layers if they exist
+            // Remove existing layers
             if (map.getLayer(`${layerId}-fill`)) map.removeLayer(`${layerId}-fill`);
             if (map.getLayer(`${layerId}-line`)) map.removeLayer(`${layerId}-line`);
             if (map.getLayer(`${layerId}-circle`)) map.removeLayer(`${layerId}-circle`);
             
-            // Get visibility state (default to visible)
             const visibility = layerVisibility[layerId] !== false ? 'visible' : 'none';
             
-            // Add fill layer for polygons
+            // Get color for this layer (or use default)
+            const color = LAYER_COLORS[layerId] || '#00FFFF';
+            
+            // Add fill layer
             map.addLayer({
                 'id': `${layerId}-fill`,
                 'type': 'fill',
                 'source': 'tileset',
                 'source-layer': layerId,
-                'layout': {
-                    'visibility': visibility
-                },
+                'layout': { 'visibility': visibility },
                 'paint': {
-                    'fill-color': '#088',
-                    'fill-opacity': 0.4
+                    'fill-color': color,
+                    'fill-opacity': 0.5
                 },
                 'filter': ['==', ['geometry-type'], 'Polygon']
             });
             
-            // Add line layer for lines and polygon outlines
+            // Add line layer
             map.addLayer({
                 'id': `${layerId}-line`,
                 'type': 'line',
                 'source': 'tileset',
                 'source-layer': layerId,
-                'layout': {
-                    'visibility': visibility
-                },
+                'layout': { 'visibility': visibility },
                 'paint': {
-                    'line-color': '#0ff',
+                    'line-color': color,
                     'line-width': 2
                 }
             });
             
-            // Add circle layer for points
+            // Add circle layer
             map.addLayer({
                 'id': `${layerId}-circle`,
                 'type': 'circle',
                 'source': 'tileset',
                 'source-layer': layerId,
-                'layout': {
-                    'visibility': visibility
-                },
+                'layout': { 'visibility': visibility },
                 'paint': {
                     'circle-radius': 5,
-                    'circle-color': '#0ff',
+                    'circle-color': color,
                     'circle-stroke-color': '#fff',
                     'circle-stroke-width': 1
                 },
                 'filter': ['==', ['geometry-type'], 'Point']
             });
             
-            // Add click handler for popups
+            // Add click handlers
             map.on('click', `${layerId}-fill`, showFeaturePopup);
             map.on('click', `${layerId}-line`, showFeaturePopup);
             map.on('click', `${layerId}-circle`, showFeaturePopup);
             
-            // Change cursor on hover
+            // Cursor changes
             map.on('mouseenter', `${layerId}-fill`, () => { map.getCanvas().style.cursor = 'pointer'; });
             map.on('mouseleave', `${layerId}-fill`, () => { map.getCanvas().style.cursor = ''; });
-            map.on('mouseenter', `${layerId}-line`, () => { map.getCanvas().style.cursor = 'pointer'; });
-            map.on('mouseleave', `${layerId}-line`, () => { map.getCanvas().style.cursor = ''; });
-            map.on('mouseenter', `${layerId}-circle`, () => { map.getCanvas().style.cursor = 'pointer'; });
-            map.on('mouseleave', `${layerId}-circle`, () => { map.getCanvas().style.cursor = ''; });
         }
         
         function showFeaturePopup(e) {
             const feature = e.features[0];
             const props = feature.properties;
             
-            // Build popup HTML
             let html = '<div style="max-height: 300px; overflow-y: auto;">';
-            html += '<table style="font-size: 12px;">';
+            html += '<table style="font-size: 12px; color: black;">';
             for (const [key, value] of Object.entries(props)) {
                 html += `<tr><td style="padding: 2px 8px 2px 0; font-weight: bold;">${key}:</td><td style="padding: 2px;">${value}</td></tr>`;
             }
@@ -890,10 +419,6 @@
                 .addTo(map);
         }
         
-        // ============================================================================
-        // LAYER VISIBILITY MANAGEMENT
-        // ============================================================================
-        
         function loadLayerVisibility() {
             const storageKey = `layer_visibility_${TILESET_ID}`;
             const saved = localStorage.getItem(storageKey);
@@ -901,13 +426,10 @@
             if (saved) {
                 try {
                     layerVisibility = JSON.parse(saved);
-                    console.log('Loaded layer visibility:', layerVisibility);
                 } catch (e) {
-                    console.error('Error parsing layer visibility:', e);
                     layerVisibility = {};
                 }
             } else {
-                // Default: all layers visible
                 layerVisibility = {};
                 layers.forEach(layerId => {
                     layerVisibility[layerId] = true;
@@ -938,10 +460,7 @@
         }
         
         function toggleAllLayers() {
-            // Check if any layer is currently off
             const anyOff = Object.values(layerVisibility).some(v => v === false);
-            
-            // If any are off, turn all on. If all are on, turn all off.
             const newState = anyOff;
             
             layers.forEach(layerId => {
@@ -949,7 +468,6 @@
                 toggleLayer(layerId, newState);
             });
             
-            // Update UI
             renderLayerList();
             
             const action = newState ? 'enabled' : 'disabled';
@@ -960,277 +478,27 @@
             const container = document.getElementById('layer-list');
             
             if (layers.length === 0) {
-                container.innerHTML = '<div class="airport-list-empty">Loading layers...</div>';
+                container.innerHTML = '<div style="text-align: center; padding: 2rem 1rem; color: hsl(var(--muted-foreground)); font-size: 0.875rem;">Loading layers...</div>';
                 return;
             }
             
             container.innerHTML = layers.map(layerId => {
                 const checked = layerVisibility[layerId] !== false ? 'checked' : '';
+                const color = LAYER_COLORS[layerId] || '#00FFFF';
                 return `
                     <div class="layer-item">
                         <input type="checkbox" 
                                id="layer-${layerId}" 
-                               data-layer="${layerId}"
                                ${checked}
                                onchange="toggleLayer('${layerId}', this.checked)">
-                        <label for="layer-${layerId}" class="layer-label">${layerId}</label>
+                        <label for="layer-${layerId}" class="layer-label">
+                            <span style="display: inline-block; width: 12px; height: 12px; background-color: ${color}; border-radius: 2px; margin-right: 8px;"></span>
+                            ${layerId}
+                        </label>
                     </div>
                 `;
             }).join('');
         }
-        
-        // ============================================================================
-        // STYLE SWITCHING
-        // ============================================================================
-        
-        function handleStyleChange(e) {
-            const styleType = e.target.value;
-            
-            if (styleType === 'custom') {
-                document.getElementById('custom-style-fields').style.display = 'block';
-            } else {
-                document.getElementById('custom-style-fields').style.display = 'none';
-                applyDarkStyle();
-            }
-        }
-        
-        function applyCustomStyle() {
-            const styleUrl = document.getElementById('custom-style-url').value.trim();
-            
-            if (!styleUrl) {
-                showToast('Error', 'Please enter a style URL', 'error');
-                return;
-            }
-            
-            // Save preferences
-            localStorage.setItem('map_style_preference', 'custom');
-            localStorage.setItem('custom_style_url', styleUrl);
-            
-            // Change style
-            map.setStyle(styleUrl);
-            
-            // Re-add tileset layers after style loads
-            map.once('style.load', function() {
-                console.log('Custom style loaded, re-adding tileset layers');
-                addTilesetLayers();
-            });
-            
-            showToast('Success', 'Custom style applied', 'success');
-        }
-        
-        function applyDarkStyle() {
-            // Save preference
-            localStorage.setItem('map_style_preference', 'dark');
-            
-            // Change style
-            map.setStyle('mapbox://styles/mapbox/dark-v11');
-            
-            // Re-add tileset layers after style loads
-            map.once('style.load', function() {
-                console.log('Dark style loaded, re-adding tileset layers');
-                addTilesetLayers();
-            });
-            
-            showToast('Success', 'Dark style applied', 'success');
-        }
-        
-        // ============================================================================
-        // AIRPORTS
-        // ============================================================================
-        
-        function loadAirports() {
-            console.log('Loading airports from API...');
-            
-            fetch(`/api/airports/${TILESET_ID}`)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}`);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    if (data.success && data.airports) {
-                        airports = data.airports;
-                        console.log(`Loaded ${airports.length} airports:`, airports);
-                        renderAirportList();
-                    } else {
-                        throw new Error('Invalid response format');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error loading airports:', error);
-                    document.getElementById('airport-list').innerHTML = 
-                        '<div class="airport-list-empty">No airports data available</div>';
-                });
-        }
-        
-        function renderAirportList() {
-            const container = document.getElementById('airport-list');
-            
-            if (airports.length === 0) {
-                container.innerHTML = '<div class="airport-list-empty">No airports found</div>';
-                return;
-            }
-            
-            container.innerHTML = airports.map(airport => {
-                const count = airport.feature_count ? ` (${airport.feature_count})` : '';
-                return `
-                    <div class="airport-item" onclick="flyToAirport('${airport.code}')">
-                        <span class="airport-code">${airport.code}${count}</span>
-                        <span class="airport-count">→</span>
-                    </div>
-                `;
-            }).join('');
-        }
-        
-        function flyToAirport(code) {
-            const airport = airports.find(a => a.code === code);
-            
-            if (!airport) {
-                showToast('Error', `Airport ${code} not found`, 'error');
-                return;
-            }
-            
-            if (airport.bounds) {
-                const [minLon, minLat, maxLon, maxLat] = airport.bounds;
-                map.fitBounds(
-                    [[minLon, minLat], [maxLon, maxLat]],
-                    { padding: 50, maxZoom: 15, duration: 1000 }
-                );
-            } else if (airport.center) {
-                map.flyTo({
-                    center: airport.center,
-                    zoom: 14,
-                    duration: 1000
-                });
-            } else {
-                showToast('Error', `No coordinates for ${code}`, 'error');
-                return;
-            }
-            
-            showToast('Success', `Zoomed to ${code}`, 'success');
-        }
-        
-        // ============================================================================
-        // TOKEN MANAGEMENT
-        // ============================================================================
-        
-        function showTokenModal() {
-            document.getElementById('token-modal').classList.add('active');
-        }
-        
-        function handleTokenSubmit(e) {
-            e.preventDefault();
-            const token = document.getElementById('public-token').value.trim();
-            
-            if (!token.startsWith('pk.')) {
-                showToast('Error', 'Invalid token format. Must start with pk.', 'error');
-                return;
-            }
-            
-            localStorage.setItem('mapbox_public_token', token);
-            currentPublicToken = token;
-            mapboxgl.accessToken = token;
-            
-            document.getElementById('token-modal').classList.remove('active');
-            showToast('Success', 'Token saved successfully', 'success');
-            
-            // Initialize map
-            initializeMap();
-        }
-        
-        function resetPublicToken() {
-            if (confirm('Are you sure you want to reset your public token?')) {
-                localStorage.removeItem('mapbox_public_token');
-                showTokenModal();
-            }
-        }
-        
-        // ============================================================================
-        // PRODUCTION DEPLOYMENT
-        // ============================================================================
-        
-        function showProductionModal() {
-            const productionTilesetId = localStorage.getItem('production_tileset_id');
-            
-            if (!productionTilesetId) {
-                // First time - configure
-                document.getElementById('production-description').textContent = 'Enter your production tileset ID to deploy.';
-                document.getElementById('production-configure').style.display = 'block';
-                document.getElementById('production-confirm').style.display = 'none';
-                document.getElementById('configure-btn').style.display = 'inline-flex';
-                document.getElementById('change-tileset-btn').style.display = 'none';
-                document.getElementById('commit-btn').style.display = 'none';
-            } else {
-                // Subsequent times - confirm
-                document.getElementById('production-description').textContent = 'Review and confirm your deployment.';
-                document.getElementById('production-configure').style.display = 'none';
-                document.getElementById('production-confirm').style.display = 'block';
-                document.getElementById('confirm-tileset-name').textContent = productionTilesetId;
-                document.getElementById('configure-btn').style.display = 'none';
-                document.getElementById('change-tileset-btn').style.display = 'inline-flex';
-                document.getElementById('commit-btn').style.display = 'inline-flex';
-            }
-            
-            document.getElementById('production-modal').classList.add('active');
-        }
-        
-        function closeProductionModal() {
-            document.getElementById('production-modal').classList.remove('active');
-        }
-        
-        function configureProduction() {
-            const tilesetId = document.getElementById('production-tileset-id').value.trim();
-            
-            if (!tilesetId) {
-                showToast('Error', 'Please enter a tileset ID', 'error');
-                return;
-            }
-            
-            if (!tilesetId.includes('.')) {
-                showToast('Error', 'Tileset ID must be in format: username.tileset-name', 'error');
-                return;
-            }
-            
-            localStorage.setItem('production_tileset_id', tilesetId);
-            showToast('Success', 'Production tileset configured', 'success');
-            closeProductionModal();
-        }
-        
-        function changeTileset() {
-            document.getElementById('production-description').textContent = 'Enter your production tileset ID to deploy.';
-            document.getElementById('production-configure').style.display = 'block';
-            document.getElementById('production-confirm').style.display = 'none';
-            document.getElementById('configure-btn').style.display = 'inline-flex';
-            document.getElementById('change-tileset-btn').style.display = 'none';
-            document.getElementById('commit-btn').style.display = 'none';
-        }
-        
-        function handleProductionSubmit(e) {
-            e.preventDefault();
-            
-            const productionTilesetId = localStorage.getItem('production_tileset_id');
-            const updateMode = document.querySelector('input[name="update-mode"]:checked').value;
-            
-            if (!productionTilesetId) {
-                showToast('Error', 'Please configure production tileset first', 'error');
-                return;
-            }
-            
-            closeProductionModal();
-            showLoading('Pushing to Production', 'This may take several minutes...');
-            
-            // This would call a backend endpoint to handle the production push
-            // For now, simulate the process
-            setTimeout(() => {
-                hideLoading();
-                showToast('Success', `Successfully pushed to production (${updateMode} mode)`, 'success');
-            }, 3000);
-        }
-        
-        // ============================================================================
-        // UI UTILITIES
-        // ============================================================================
         
         function showToast(title, message, type = 'info') {
             const container = document.getElementById('toast-container');
@@ -1247,16 +515,6 @@
                 toast.style.opacity = '0';
                 setTimeout(() => toast.remove(), 300);
             }, 5000);
-        }
-        
-        function showLoading(title, message) {
-            document.getElementById('loading-title').textContent = title;
-            document.getElementById('loading-message').textContent = message;
-            document.getElementById('loading-overlay').classList.add('active');
-        }
-        
-        function hideLoading() {
-            document.getElementById('loading-overlay').classList.remove('active');
         }
     </script>
 </body>
