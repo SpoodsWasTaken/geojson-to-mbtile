@@ -38,15 +38,19 @@ RUN apt-get update && apt-get install -y \
 # Copy application files
 COPY requirements.txt .
 COPY app.py .
+COPY start.sh .
 COPY templates/ ./templates/
+
+# Make startup script executable
+RUN chmod +x start.sh
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Expose the port the app runs on
+# Expose the port the app runs on (Railway sets this dynamically)
 EXPOSE 8080
 
 # Define the command to run the application
-# Use gunicorn for a production-ready server
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--timeout", "300", "app:app"]
+# Use startup script to ensure proper configuration
+CMD ["./start.sh"]
 
