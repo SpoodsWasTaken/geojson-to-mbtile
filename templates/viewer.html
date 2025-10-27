@@ -538,7 +538,10 @@
 
             <!-- Layers Section -->
             <div class="sidebar-section">
-                <div class="section-title">Layers</div>
+                <div class="section-title" style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>Layers</span>
+                    <button onclick="toggleAllLayers()" class="button" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Toggle All</button>
+                </div>
                 <div id="layer-list">
                     <div class="airport-list-empty">Loading layers...</div>
                 </div>
@@ -707,21 +710,15 @@
         function initializeMap() {
             mapboxgl.accessToken = currentPublicToken;
 
-            // Get saved style preference
-            const savedStyle = localStorage.getItem('map_style_preference') || 'dark';
+            // Always start with dark style (default)
             const savedCustomUrl = localStorage.getItem('custom_style_url') || 'mapbox://styles/ericbutton/cmh27faz3002o01rf7r040hag';
-
             document.getElementById('custom-style-url').value = savedCustomUrl;
-
-            let styleUrl;
-            if (savedStyle === 'custom') {
-                styleUrl = savedCustomUrl;
-                document.getElementById('style-custom').checked = true;
-                document.getElementById('custom-style-fields').style.display = 'block';
-            } else {
-                styleUrl = 'mapbox://styles/mapbox/dark-v11';
-                document.getElementById('style-dark').checked = true;
-            }
+            
+            // Force dark style on init
+            const styleUrl = 'mapbox://styles/mapbox/dark-v11';
+            document.getElementById('style-dark').checked = true;
+            document.getElementById('custom-style-fields').style.display = 'none';
+            localStorage.setItem('map_style_preference', 'dark');
 
             map = new mapboxgl.Map({
                 container: 'map',
@@ -732,7 +729,6 @@
 
             map.on('load', function() {
                 addTilesetLayers();
-                extractAirports();
                 setupEventListeners();
             });
 
@@ -759,6 +755,12 @@
                         layers.forEach(layerId => {
                             addLayerToMap(layerId);
                         });
+                        
+                        // Extract airports after layers are added
+                        // Wait a bit for layers to be fully loaded
+                        setTimeout(() => {
+                            extractAirports();
+                        }, 500);
                     }
                 })
                 .catch(error => {
@@ -929,7 +931,7 @@
 
             container.innerHTML = layers.map(layerId => `
                 <div class="layer-item">
-                    <input type="checkbox" id="layer-${layerId}" checked onchange="toggleLayer('${layerId}', this.checked)">
+                    <input type="checkbox" id="layer-${layerId}" data-layer="${layerId}" checked onchange="toggleLayer('${layerId}', this.checked)">
                     <label for="layer-${layerId}" class="layer-label">${layerId}</label>
                 </div>
             `).join('');
@@ -987,6 +989,24 @@
                 map.setLayoutProperty(`${layerId}-circle`, 'visibility', visibility);
             }
         }
+        
+        function toggleAllLayers() {
+            // Check if any layer is currently off
+            const checkboxes = document.querySelectorAll('#layer-list input[type="checkbox"]');
+            const anyUnchecked = Array.from(checkboxes).some(cb => !cb.checked);
+            
+            // If any are off, turn all on. If all are on, turn all off.
+            const newState = anyUnchecked;
+            
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = newState;
+                const layerId = checkbox.dataset.layer;
+                toggleLayer(layerId, newState);
+            });
+            
+            const action = newState ? 'enabled' : 'disabled';
+            showToast('Success', `All layers ${action}`, 'success');
+        }
 
         function applyCustomStyle() {
             const styleUrl = document.getElementById('custom-style-url').value;
@@ -999,6 +1019,16 @@
             localStorage.setItem('map_style_preference', 'custom');
             localStorage.setItem('custom_style_url', styleUrl);
 
+            // Remove existing source and layers before style change
+            if (map.getSource('tileset')) {
+                layers.forEach(layerId => {
+                    if (map.getLayer(`${layerId}-fill`)) map.removeLayer(`${layerId}-fill`);
+                    if (map.getLayer(`${layerId}-line`)) map.removeLayer(`${layerId}-line`);
+                    if (map.getLayer(`${layerId}-circle`)) map.removeLayer(`${layerId}-circle`);
+                });
+                map.removeSource('tileset');
+            }
+
             map.setStyle(styleUrl);
             map.once('style.load', function() {
                 addTilesetLayers();
@@ -1009,6 +1039,16 @@
 
         function applyDarkStyle() {
             localStorage.setItem('map_style_preference', 'dark');
+            
+            // Remove existing source and layers before style change
+            if (map.getSource('tileset')) {
+                layers.forEach(layerId => {
+                    if (map.getLayer(`${layerId}-fill`)) map.removeLayer(`${layerId}-fill`);
+                    if (map.getLayer(`${layerId}-line`)) map.removeLayer(`${layerId}-line`);
+                    if (map.getLayer(`${layerId}-circle`)) map.removeLayer(`${layerId}-circle`);
+                });
+                map.removeSource('tileset');
+            }
             
             map.setStyle('mapbox://styles/mapbox/dark-v11');
             map.once('style.load', function() {
