@@ -8,12 +8,12 @@
     <script src='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'></script>
     <style>
         :root {
-            --background: 0 0% 3.9%;
+            --background: 0 0% 10%;
             --foreground: 0 0% 98%;
-            --card: 0 0% 3.9%;
-            --border: 0 0% 14.9%;
+            --card: 0 0% 14%;
+            --border: 0 0% 25%;
             --primary: 0 0% 98%;
-            --secondary: 0 0% 14.9%;
+            --secondary: 0 0% 20%;
             --muted-foreground: 0 0% 63.9%;
             --success: 142 76% 36%;
             --destructive: 0 62.8% 30.6%;
@@ -29,7 +29,7 @@
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background-color: hsl(var(--background));
-            background-image: radial-gradient(circle, hsl(0 0% 20%) 1px, transparent 1px);
+            background-image: radial-gradient(circle, hsla(0, 0%, 30%, 0.3) 1px, transparent 1px);
             background-size: 20px 20px;
             color: hsl(var(--foreground));
             height: 100vh;
@@ -650,12 +650,38 @@
 
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
+            // Setup event listeners first
+            setupEventListeners();
+            // Then initialize viewer
             initializeViewer();
         });
+        
+        function setupEventListeners() {
+            // Token form
+            document.getElementById('token-form').addEventListener('submit', handleTokenSubmit);
+
+            // Production form
+            document.getElementById('production-form').addEventListener('submit', handleProductionSubmit);
+
+            // Push to production button
+            document.getElementById('push-production-btn').addEventListener('click', showProductionModal);
+            
+            // Style radio buttons
+            document.querySelectorAll('input[name="map-style"]').forEach(radio => {
+                radio.addEventListener('change', function() {
+                    if (this.value === 'custom') {
+                        document.getElementById('custom-style-fields').style.display = 'block';
+                    } else {
+                        document.getElementById('custom-style-fields').style.display = 'none';
+                        applyDarkStyle();
+                    }
+                });
+            });
+        }
 
         async function initializeViewer() {
-            // Check for public token
-            currentPublicToken = localStorage.getItem('mapbox_public_token');
+            // Check for public token from localStorage or server
+            currentPublicToken = localStorage.getItem('mapbox_public_token') || '{{ mapbox_public_token }}';
             
             if (!currentPublicToken) {
                 showTokenModal();
@@ -667,6 +693,11 @@
                 showToast('Error', 'Invalid public token format. Must start with pk.', 'error');
                 showTokenModal();
                 return;
+            }
+
+            // Save to localStorage if from server
+            if ('{{ mapbox_public_token }}' && !localStorage.getItem('mapbox_public_token')) {
+                localStorage.setItem('mapbox_public_token', '{{ mapbox_public_token }}');
             }
 
             // Initialize map
@@ -923,29 +954,6 @@
             if (map.getLayer(`${layerId}-circle`)) {
                 map.setLayoutProperty(`${layerId}-circle`, 'visibility', visibility);
             }
-        }
-
-        function setupEventListeners() {
-            // Style selector
-            document.querySelectorAll('input[name="map-style"]').forEach(radio => {
-                radio.addEventListener('change', function() {
-                    if (this.value === 'custom') {
-                        document.getElementById('custom-style-fields').style.display = 'block';
-                    } else {
-                        document.getElementById('custom-style-fields').style.display = 'none';
-                        applyDarkStyle();
-                    }
-                });
-            });
-
-            // Token form
-            document.getElementById('token-form').addEventListener('submit', handleTokenSubmit);
-
-            // Production form
-            document.getElementById('production-form').addEventListener('submit', handleProductionSubmit);
-
-            // Push to production button
-            document.getElementById('push-production-btn').addEventListener('click', showProductionModal);
         }
 
         function applyCustomStyle() {

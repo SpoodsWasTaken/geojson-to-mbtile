@@ -27,6 +27,8 @@ APP_PASSCODE = os.environ.get('PASSCODE', 'changeme')
 # Default tileset configuration
 DEFAULT_STAGING_TILESET = os.environ.get('DEFAULT_STAGING_TILESET', '')
 DEFAULT_PRODUCTION_TILESET = os.environ.get('DEFAULT_PRODUCTION_TILESET', '')
+MAPBOX_SECRET_TOKEN = os.environ.get('MAPBOX_SECRET_TOKEN', '')
+MAPBOX_PUBLIC_TOKEN = os.environ.get('MAPBOX_PUBLIC_TOKEN', '')
 
 def require_auth(f):
     """Decorator to require authentication for protected routes."""
@@ -67,7 +69,9 @@ def index():
     """Render the upload form."""
     return render_template('index.html', 
                          default_staging_tileset=DEFAULT_STAGING_TILESET,
-                         default_production_tileset=DEFAULT_PRODUCTION_TILESET)
+                         default_production_tileset=DEFAULT_PRODUCTION_TILESET,
+                         mapbox_secret_token=MAPBOX_SECRET_TOKEN,
+                         mapbox_public_token=MAPBOX_PUBLIC_TOKEN)
 
 @app.route('/auth/check')
 def check_auth():
@@ -97,8 +101,10 @@ def logout():
 @require_auth
 def viewer():
     """Render the map viewer (requires authentication)."""
-    tileset_id = request.args.get('tileset_id', 'ericbutton.staging-9r4spd')
-    return render_template('viewer.html', tileset_id=tileset_id)
+    tileset_id = request.args.get('tileset_id', DEFAULT_STAGING_TILESET or 'ericbutton.staging-9r4spd')
+    return render_template('viewer.html', 
+                         tileset_id=tileset_id,
+                         mapbox_public_token=MAPBOX_PUBLIC_TOKEN)
 
 @app.route('/health')
 def health():
