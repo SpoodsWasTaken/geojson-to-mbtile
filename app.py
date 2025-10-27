@@ -64,6 +64,26 @@ def get_mbtiles_layers(mbtiles_path):
         print(f"Error reading MBTiles layers: {e}")
         return []
 
+def get_airports_from_tileset(tileset_id, access_token):
+    """Extract unique airport codes from a Mapbox tileset."""
+    try:
+        # Query tileset metadata
+        url = f"https://api.mapbox.com/v4/{tileset_id}.json?secure&access_token={access_token}"
+        response = requests.get(url)
+        
+        if response.status_code != 200:
+            return []
+        
+        data = response.json()
+        
+        # For now, return empty list as we need to query actual features
+        # This would require querying tiles which is complex
+        # Better approach: extract from MBTiles file during upload
+        return []
+    except Exception as e:
+        print(f"Error getting airports from tileset: {e}")
+        return []
+
 @app.route('/')
 def index():
     """Render the upload form."""
@@ -178,6 +198,9 @@ def upload():
                 }), 400
 
             # Step 2: Preprocess GeoJSON files to add airport_id property
+            # Also collect airport information for metadata
+            airports_data = {}  # {airport_code: {"bounds": [minLon, minLat, maxLon, maxLat], "count": N}}
+            
             for geojson_file in geojson_files:
                 try:
                     with open(geojson_file, 'r') as f:
@@ -189,18 +212,69 @@ def upload():
                         normalized = filename.replace('_', '-')
                         airport_code = normalized.split('-')[0].upper()
                         
-                        # Add airport_id to each feature
+                        # Initialize airport data if not exists
+                        if airport_code not in airports_data:
+                            airports_data[airport_code] = {
+                                "bounds": [float('inf'), float('inf'), float('-inf'), float('-inf')],
+                                "count": 0
+                            }
+                        
+                        # Add airport_id to each feature and update bounds
                         if 'features' in data:
                             for feature in data['features']:
                                 if 'properties' not in feature:
                                     feature['properties'] = {}
                                 feature['properties']['airport_id'] = airport_code
+                                airports_data[airport_code]['count'] += 1
+                                
+                                # Update bounds from feature geometry
+                                geom = feature.get('geometry', {})
+                                if geom.get('type') == 'Point':
+                                    coords = geom['coordinates']
+                                    airports_data[airport_code]['bounds'][0] = min(airports_data[airport_code]['bounds'][0], coords[0])
+                                    airports_data[airport_code]['bounds'][1] = min(airports_data[airport_code]['bounds'][1], coords[1])
+                                    airports_data[airport_code]['bounds'][2] = max(airports_data[airport_code]['bounds'][2], coords[0])
+                                    airports_data[airport_code]['bounds'][3] = max(airports_data[airport_code]['bounds'][3], coords[1])
+                                elif geom.get('type') in ['LineString', 'MultiLineString', 'Polygon', 'MultiPolygon']:
+                                    # Simplified bounds calculation
+                                    coords_list = geom['coordinates']
+                                    def flatten_coords(coords):
+                                        if isinstance(coords[0], (int, float)):
+                                            return [coords]
+                                        result = []
+                                        for item in coords:
+                                            result.extend(flatten_coords(item))
+                                        return result
+                                    
+                                    all_coords = flatten_coords(coords_list)
+                                    for coord in all_coords:
+                                        if len(coord) >= 2:
+                                            airports_data[airport_code]['bounds'][0] = min(airports_data[airport_code]['bounds'][0], coord[0])
+                                            airports_data[airport_code]['bounds'][1] = min(airports_data[airport_code]['bounds'][1], coord[1])
+                                            airports_data[airport_code]['bounds'][2] = max(airports_data[airport_code]['bounds'][2], coord[0])
+                                            airports_data[airport_code]['bounds'][3] = max(airports_data[airport_code]['bounds'][3], coord[1])
                         
                         # Write back
                         with open(geojson_file, 'w') as f:
                             json.dump(data, f)
                 except Exception as e:
                     print(f"Warning: Could not preprocess {geojson_file}: {e}")
+            
+            # Calculate center coordinates for each airport
+            airports_list = []
+            for code, data in airports_data.items():
+                bounds = data['bounds']
+                center_lon = (bounds[0] + bounds[2]) / 2
+                center_lat = (bounds[1] + bounds[3]) / 2
+                airports_list.append({
+                    "code": code,
+                    "center": [center_lon, center_lat],
+                    "bounds": bounds,
+                    "feature_count": data['count']
+                })
+            
+            # Sort by airport code
+            airports_list.sort(key=lambda x: x['code'])
             
             # Step 3: Group GeoJSON files by type (suffix after dash or underscore)
             files_by_type = defaultdict(list)
@@ -319,6 +393,23 @@ def upload():
                     capture_output=True,
                     text=True
                 )
+            
+            # Step 4.5: Add airport metadata to MBTiles
+            try:
+                conn = sqlite3.connect(output_mbtiles_path)
+                cursor = conn.cursor()
+                
+                # Store airports as custom metadata
+                cursor.execute(
+                    "INSERT OR REPLACE INTO metadata (name, value) VALUES (?, ?)",
+                    ('airports', json.dumps(airports_list))
+                )
+                
+                conn.commit()
+                conn.close()
+                print(f"Added {len(airports_list)} airports to MBTiles metadata")
+            except Exception as e:
+                print(f"Warning: Could not add airport metadata: {e}")
 
             # Step 5: Handle output based on mode
             if output_mode == 'download':
@@ -345,7 +436,8 @@ def upload():
                                 "tileset_id": tileset_id,
                                 "mapbox_url": f"https://studio.mapbox.com/tilesets/{tileset_id}/",
                                 "mode": "replace",
-                                "layers": new_layers
+                                "layers": new_layers,
+                                "airports": airports_list
                             })
                         else:
                             return jsonify({
@@ -439,7 +531,8 @@ def upload():
                                         "mapbox_url": f"https://studio.mapbox.com/tilesets/{tileset_id}/",
                                         "mode": "append (smart)",
                                         "layers_updated": layers_to_exclude,
-                                        "layers_added": [l for l in new_layers if l not in layers_to_exclude]
+                                        "layers_added": [l for l in new_layers if l not in layers_to_exclude],
+                                        "airports": airports_list
                                     })
                                 else:
                                     return jsonify({
@@ -460,7 +553,8 @@ def upload():
                                         "tileset_id": tileset_id,
                                         "mapbox_url": f"https://studio.mapbox.com/tilesets/{tileset_id}/",
                                         "mode": "append (new tileset)",
-                                        "layers": new_layers
+                                        "layers": new_layers,
+                                        "airports": airports_list
                                     })
                                 else:
                                     return jsonify({

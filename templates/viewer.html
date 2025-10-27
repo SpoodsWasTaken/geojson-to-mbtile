@@ -532,7 +532,7 @@
             <div class="sidebar-section">
                 <div class="section-title" style="display: flex; justify-content: space-between; align-items: center;">
                     <span>Airports</span>
-                    <button onclick="extractAirports()" class="button" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" title="Refresh airport list from visible features">Refresh</button>
+                    <button onclick="extractAirportsFromMap()" class="button" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" title="Refresh airport list from visible features">Refresh</button>
                 </div>
                 <div class="airport-list" id="airport-list">
                     <div class="airport-list-empty">Loading airports...</div>
@@ -677,9 +677,16 @@
                 radio.addEventListener('change', function() {
                     if (this.value === 'custom') {
                         document.getElementById('custom-style-fields').style.display = 'block';
+                        // Auto-apply if URL is already filled
+                        const styleUrl = document.getElementById('custom-style-url').value;
+                        if (styleUrl && map) {
+                            applyCustomStyle();
+                        }
                     } else {
                         document.getElementById('custom-style-fields').style.display = 'none';
-                        applyDarkStyle();
+                        if (map) {
+                            applyDarkStyle();
+                        }
                     }
                 });
             });
@@ -759,10 +766,10 @@
                             addLayerToMap(layerId);
                         });
                         
-                        // Extract airports after layers are added
-                        // Wait for tiles to load with longer delay
+                        // Load airports after layers are added
+                        // Try from localStorage first, fallback to map extraction
                         setTimeout(() => {
-                            extractAirports();
+                            loadAirports();
                         }, 2000);  // Increased from 500ms to 2000ms
                     }
                 })
@@ -876,15 +883,34 @@
                 .addTo(map);
         }
 
-        function extractAirports() {
-            // Extract airport codes by querying the tileset for unique airport_id values
-            // We need to query rendered features across all layers
+        function loadAirports() {
+            // Load airports from localStorage (stored during upload)
+            const storageKey = `airports_${TILESET_ID}`;
+            const storedAirports = localStorage.getItem(storageKey);
+            
+            if (storedAirports) {
+                try {
+                    airports = JSON.parse(storedAirports);
+                    console.log(`Loaded ${airports.length} airports from storage:`, airports);
+                    renderAirportList();
+                    return;
+                } catch (e) {
+                    console.error('Error parsing stored airports:', e);
+                }
+            }
+            
+            // Fallback: Try to extract from map features (old method)
+            console.log('No stored airports found, extracting from map...');
+            extractAirportsFromMap();
+        }
+        
+        function extractAirportsFromMap() {
+            // Fallback method: Extract airport codes by querying map features
             const airportSet = new Set();
 
             // Query all rendered features from all layers
             layers.forEach(layerId => {
                 try {
-                    // Query rendered features (visible in viewport and loaded tiles)
                     const features = map.queryRenderedFeatures({ layers: [
                         `${layerId}-fill`,
                         `${layerId}-line`, 
@@ -893,7 +919,6 @@
                     
                     features.forEach(feature => {
                         const props = feature.properties;
-                        // Look for airport identifier in properties
                         if (props.airport_id) {
                             airportSet.add(props.airport_id.toUpperCase());
                         }
@@ -903,9 +928,8 @@
                 }
             });
 
-            // If no airports found from rendered features, try to extract from source features
+            // If no airports found, try source features
             if (airportSet.size === 0) {
-                console.log('No airports found in rendered features, trying source features...');
                 layers.forEach(layerId => {
                     try {
                         const features = map.querySourceFeatures('tileset', {
@@ -924,8 +948,9 @@
                 });
             }
 
-            airports = Array.from(airportSet).sort();
-            console.log('Extracted airports:', airports);
+            // Convert to array of objects with just code (for compatibility)
+            airports = Array.from(airportSet).sort().map(code => ({ code: code }));
+            console.log('Extracted airports from map:', airports);
             renderAirportList();
         }
 
@@ -937,12 +962,16 @@
                 return;
             }
 
-            container.innerHTML = airports.map(code => `
-                <div class="airport-item" onclick="flyToAirport('${code}')">
-                    <span class="airport-code">${code}</span>
-                    <span class="airport-count">→</span>
-                </div>
-            `).join('');
+            container.innerHTML = airports.map(airport => {
+                const code = typeof airport === 'string' ? airport : airport.code;
+                const count = airport.feature_count ? ` (${airport.feature_count})` : '';
+                return `
+                    <div class="airport-item" onclick="flyToAirport('${code}')">
+                        <span class="airport-code">${code}${count}</span>
+                        <span class="airport-count">→</span>
+                    </div>
+                `;
+            }).join('');
         }
 
         function renderLayerList() {
@@ -962,17 +991,44 @@
         }
 
         function flyToAirport(code) {
-            // Find all features for this airport by querying for airport_id property
+            // First, check if we have stored coordinates for this airport
+            const airport = airports.find(a => 
+                (typeof a === 'string' ? a : a.code) === code
+            );
+            
+            if (airport && typeof airport === 'object' && airport.center) {
+                // Use stored center coordinates
+                const [lon, lat] = airport.center;
+                
+                if (airport.bounds) {
+                    // Use stored bounds for better framing
+                    const [minLon, minLat, maxLon, maxLat] = airport.bounds;
+                    map.fitBounds(
+                        [[minLon, minLat], [maxLon, maxLat]],
+                        { padding: 50, maxZoom: 15, duration: 1000 }
+                    );
+                } else {
+                    // Just fly to center
+                    map.flyTo({
+                        center: [lon, lat],
+                        zoom: 14,
+                        duration: 1000
+                    });
+                }
+                
+                showToast('Success', `Zoomed to ${code}`, 'success');
+                return;
+            }
+            
+            // Fallback: Query features from map (old method)
             const features = [];
             
             layers.forEach(layerId => {
                 try {
-                    // Query all source features from this layer
                     const layerFeatures = map.querySourceFeatures('tileset', {
                         sourceLayer: layerId
                     });
                     
-                    // Filter features that match this airport code
                     const airportFeatures = layerFeatures.filter(f => 
                         f.properties && f.properties.airport_id === code
                     );
@@ -1004,7 +1060,6 @@
                 }
             });
 
-            // Fly to bounds
             map.fitBounds(bounds, {
                 padding: 50,
                 maxZoom: 15,
