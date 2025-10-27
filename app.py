@@ -177,7 +177,32 @@ def upload():
                     "error": "No .geojson files found in the ZIP archive"
                 }), 400
 
-            # Step 2: Group GeoJSON files by type (suffix after dash or underscore)
+            # Step 2: Preprocess GeoJSON files to add airport_id property
+            for geojson_file in geojson_files:
+                try:
+                    with open(geojson_file, 'r') as f:
+                        data = json.load(f)
+                    
+                    # Extract airport code from filename (part before dash/underscore)
+                    filename = geojson_file.stem
+                    if '-' in filename or '_' in filename:
+                        normalized = filename.replace('_', '-')
+                        airport_code = normalized.split('-')[0].upper()
+                        
+                        # Add airport_id to each feature
+                        if 'features' in data:
+                            for feature in data['features']:
+                                if 'properties' not in feature:
+                                    feature['properties'] = {}
+                                feature['properties']['airport_id'] = airport_code
+                        
+                        # Write back
+                        with open(geojson_file, 'w') as f:
+                            json.dump(data, f)
+                except Exception as e:
+                    print(f"Warning: Could not preprocess {geojson_file}: {e}")
+            
+            # Step 3: Group GeoJSON files by type (suffix after dash or underscore)
             files_by_type = defaultdict(list)
             
             for geojson_file in geojson_files:

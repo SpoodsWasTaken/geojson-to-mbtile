@@ -767,7 +767,32 @@
                 });
         }
 
+        // Color scheme for different layer types
+        const layerColors = {
+            'rwy': '#FF6B6B',      // Red for runways
+            'taxiway': '#4ECDC4',  // Cyan for taxiways
+            'twy': '#4ECDC4',      // Cyan for taxiways (alternate)
+            'apron': '#95E1D3',    // Light green for aprons
+            'pave': '#A8E6CF',     // Pale green for pavement
+            'grass': '#7FB069',    // Green for grass
+            'threshold': '#FFE66D', // Yellow for thresholds
+            'rwcl': '#FFA07A',     // Orange for runway centerlines
+            'rwyend': '#FF8C94',   // Pink for runway ends
+            'aim': '#B4A7D6',      // Purple for aim points
+            'arrow': '#9B59B6',    // Purple for arrows
+            'chevron': '#E67E22',  // Orange for chevrons
+            'num': '#F39C12',      // Gold for numbers
+            'small': '#BDC3C7',    // Grey for small features
+            'emas': '#E74C3C',     // Red for EMAS
+            'default': '#088'      // Default teal
+        };
+        
+        function getLayerColor(layerId) {
+            return layerColors[layerId.toLowerCase()] || layerColors['default'];
+        }
+        
         function addLayerToMap(layerId) {
+            const color = getLayerColor(layerId);
             // Add fill layer for polygons
             if (!map.getLayer(`${layerId}-fill`)) {
                 map.addLayer({
@@ -776,8 +801,8 @@
                     'source': 'tileset',
                     'source-layer': layerId,
                     'paint': {
-                        'fill-color': '#088',
-                        'fill-opacity': 0.4
+                        'fill-color': color,
+                        'fill-opacity': 0.5
                     },
                     'filter': ['==', '$type', 'Polygon']
                 });
@@ -791,8 +816,9 @@
                     'source': 'tileset',
                     'source-layer': layerId,
                     'paint': {
-                        'line-color': '#088',
-                        'line-width': 2
+                        'line-color': color,
+                        'line-width': 2,
+                        'line-opacity': 0.8
                     }
                 });
             }
@@ -806,7 +832,8 @@
                     'source-layer': layerId,
                     'paint': {
                         'circle-radius': 6,
-                        'circle-color': '#088',
+                        'circle-color': color,
+                        'circle-opacity': 0.7,
                         'circle-stroke-width': 2,
                         'circle-stroke-color': '#fff'
                     },
@@ -845,29 +872,34 @@
         }
 
         function extractAirports() {
-            // Query all features and extract airport codes from properties or layer names
+            // Query all features and extract airport codes from properties
             const airportSet = new Set();
 
+            // Query features from all layers
             layers.forEach(layerId => {
-                // Extract airport code from layer name (before dash or underscore)
-                const match = layerId.match(/^([A-Z0-9]+)[-_]/);
-                if (match) {
-                    airportSet.add(match[1]);
+                try {
+                    const features = map.querySourceFeatures('tileset', {
+                        sourceLayer: layerId
+                    });
+                    
+                    features.forEach(feature => {
+                        const props = feature.properties;
+                        // Look for airport identifier in properties
+                        if (props.airport_id) {
+                            airportSet.add(props.airport_id.toUpperCase());
+                        } else if (props.airport) {
+                            airportSet.add(props.airport.toUpperCase());
+                        } else if (props.code) {
+                            airportSet.add(props.code.toUpperCase());
+                        }
+                    });
+                } catch (e) {
+                    console.log('Could not query layer:', layerId, e);
                 }
             });
 
-            // If no airports found from layer names, try querying features
-            if (airportSet.size === 0) {
-                map.querySourceFeatures('tileset').forEach(feature => {
-                    const props = feature.properties;
-                    // Look for common airport identifier properties
-                    if (props.airport || props.airport_id || props.code) {
-                        airportSet.add(props.airport || props.airport_id || props.code);
-                    }
-                });
-            }
-
             airports = Array.from(airportSet).sort();
+            console.log('Extracted airports:', airports);
             renderAirportList();
         }
 

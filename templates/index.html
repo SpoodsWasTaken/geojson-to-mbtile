@@ -813,6 +813,7 @@
             e.preventDefault();
 
             const outputMode = document.querySelector('input[name="output_mode"]:checked').value;
+            const updateMode = document.querySelector('input[name="update_mode"]:checked')?.value || 'append';
 
             // Check authentication for Mapbox operations
             if (outputMode === 'mapbox' && !isAuthenticated) {
