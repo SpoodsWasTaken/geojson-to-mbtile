@@ -404,6 +404,9 @@
             <div class="modal-description" id="production-description">
                 Deploy your staging tileset to production.
             </div>
+            <div id="production-note" style="display: none; background: #FFF3CD; border: 1px solid #FFC107; border-radius: 4px; padding: 12px; margin-bottom: 16px; font-size: 13px; color: #856404;">
+                <strong>⚠️ Note:</strong> If you get an error about MBTiles not found, you need to re-upload your data to staging first (v3.10.0+ required).
+            </div>
             
             <form id="production-form" onsubmit="handleProductionSubmit(event)">
                 <div id="production-configure" style="display: none;">
@@ -480,7 +483,7 @@
         
         // Layer colors (multicolored!)
         const LAYER_COLORS = {
-            'rwy': '#CC0000',      // Dark red for runways
+            'rwy': '#4A4A4A',      // Dark gray for runways (less visible)
             'twy': '#FFD700',      // Yellow for taxiways
             'aim': '#FFE66D',      // Yellow for aim points
             'pave': '#2C5F5F',     // Dark teal for pavement
@@ -642,15 +645,21 @@
         function showFeaturePopup(e) {
             const feature = e.features[0];
             const props = feature.properties;
+            const layerName = feature.sourceLayer || 'unknown';
             
-            let html = '<div style="max-height: 300px; overflow-y: auto;">';
-            html += '<table style="font-size: 12px; color: black;">';
+            let html = '<div style="max-height: 400px; overflow-y: auto;">';
+            
+            // Layer name header
+            html += `<div style="font-weight: bold; font-size: 14px; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 2px solid #333; color: black;">Layer: ${layerName}</div>`;
+            
+            // Properties table
+            html += '<table style="font-size: 12px; color: black; width: 100%;">';
             for (const [key, value] of Object.entries(props)) {
-                html += `<tr><td style="padding: 2px 8px 2px 0; font-weight: bold;">${key}:</td><td style="padding: 2px;">${value}</td></tr>`;
+                html += `<tr><td style="padding: 3px 12px 3px 0; font-weight: bold; vertical-align: top;">${key}:</td><td style="padding: 3px 0; word-break: break-word;">${value}</td></tr>`;
             }
             html += '</table></div>';
             
-            new mapboxgl.Popup()
+            new mapboxgl.Popup({ maxWidth: '400px' })
                 .setLngLat(e.lngLat)
                 .setHTML(html)
                 .addTo(map);
@@ -757,6 +766,9 @@
         // Production modal functions
         function showProductionModal() {
             const productionTilesetId = localStorage.getItem('production_tileset_id');
+            
+            // Show helpful note
+            document.getElementById('production-note').style.display = 'block';
             
             if (!productionTilesetId) {
                 // First time - configure
