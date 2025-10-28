@@ -73,58 +73,113 @@ def get_mbtiles_layers(mbtiles_path):
         print(f"Error reading MBTiles layers: {e}")
         return []
 
+
+def get_airports_from_tileset(tileset_id, access_token):
+    """Extract unique airport codes from a Mapbox tileset."""
+    try:
+        # Query tileset metadata
+        url = f"https://api.mapbox.com/v4/{tileset_id}.json?secure&access_token={access_token}"
+        response = requests.get(url)
+        
+        if response.status_code != 200:
+            return []
+        
+        data = response.json()
+        
+        # For now, return empty list as we need to query actual features
+        # This would require querying tiles which is complex
+        # Better approach: extract from MBTiles file during upload
+        return []
+    except Exception as e:
+        print(f"Error getting airports from tileset: {e}")
+        return []
+
 @app.route('/')
 def index():
-    """Render the main upload page."""
-    return render_template('index.html',
-                         default_staging_tileset=DEFAULT_STAGING_TILESET,
-                         mapbox_secret_token=MAPBOX_SECRET_TOKEN,
-                         mapbox_public_token=MAPBOX_PUBLIC_TOKEN)
-
-@app.route('/viewer')
-def viewer():
-    """Render the viewer page for managing tilesets."""
-    return render_template('viewer.html',
+    """Render the upload form."""
+    return render_template('index.html', 
                          default_staging_tileset=DEFAULT_STAGING_TILESET,
                          default_production_tileset=DEFAULT_PRODUCTION_TILESET,
                          mapbox_secret_token=MAPBOX_SECRET_TOKEN,
                          mapbox_public_token=MAPBOX_PUBLIC_TOKEN)
 
-@app.route('/api/authenticate', methods=['POST'])
-def authenticate():
-    """Authenticate user with passcode."""
-    data = request.json
-    passcode = data.get('passcode', '')
-    
-    if passcode == APP_PASSCODE:
-        session['authenticated'] = True
-        return jsonify({'success': True, 'authenticated': True})
-    else:
-        return jsonify({'success': False, 'error': 'Invalid passcode'}), 401
-
-@app.route('/api/check-auth', methods=['GET'])
+@app.route('/auth/check')
 def check_auth():
     """Check if user is authenticated."""
     return jsonify({'authenticated': session.get('authenticated', False)})
 
-@app.route('/api/logout', methods=['POST'])
+@app.route('/auth/login', methods=['POST'])
+def login():
+    """Authenticate user with passcode."""
+    data = request.get_json()
+    passcode = data.get('passcode', '')
+    
+    if passcode == APP_PASSCODE:
+        session['authenticated'] = True
+        session.permanent = True  # Session lasts 24 hours
+        return jsonify({'success': True, 'message': 'Authentication successful'})
+    else:
+        return jsonify({'success': False, 'message': 'Invalid passcode'}), 401
+
+@app.route('/auth/logout', methods=['POST'])
 def logout():
-    """Log out the user."""
+    """Logout user."""
     session.pop('authenticated', None)
-    return jsonify({'success': True, 'authenticated': False})
+    return jsonify({'success': True, 'message': 'Logged out successfully'})
+
+@app.route('/viewer')
+@require_auth
+def viewer():
+    """Render the map viewer (requires authentication)."""
+    tileset_id = request.args.get('tileset_id', DEFAULT_STAGING_TILESET or 'ericbutton.staging-9r4spd')
+    return render_template('viewer.html', 
+                         tileset_id=tileset_id,
+                         mapbox_public_token=MAPBOX_PUBLIC_TOKEN)
+
+@app.route('/health')
+def health():
+    """Health check endpoint for Railway."""
+    return jsonify({"status": "healthy"}), 200
+
+@app.route('/api/airports/<tileset_id>')
+@require_auth
+def get_airports(tileset_id):
+    """Get airports list for a specific tileset."""
+    # Sanitize tileset_id for filename
+    airports_filename = f"{tileset_id.replace('.', '_').replace('/', '_')}_airports.json"
+    airports_filepath = DATA_DIR / airports_filename
+    
+    if not airports_filepath.exists():
+        return jsonify({
+            "error": "Airports data not found for this tileset",
+            "tileset_id": tileset_id
+        }), 404
+    
+    try:
+        with open(airports_filepath, 'r') as f:
+            airports = json.load(f)
+        return jsonify({
+            "success": True,
+            "tileset_id": tileset_id,
+            "airports": airports,
+            "count": len(airports)
+        })
+    except Exception as e:
+        return jsonify({
+            "error": "Failed to load airports data",
+            "details": str(e)
+        }), 500
 
 @app.route('/upload', methods=['POST'])
-@require_auth
 def upload():
     """
-    Handle file upload and conversion to MBTiles.
-    Supports both download and Mapbox upload modes.
+    Handle file upload, convert GeoJSON files to MBTiles, and optionally upload to Mapbox.
     """
+    # Validate file upload
     if 'file' not in request.files:
-        return jsonify({"error": "No file uploaded"}), 400
+        return jsonify({"error": "No file part in the request"}), 400
     
     file = request.files['file']
-    
     if file.filename == '':
         return jsonify({"error": "No file selected"}), 400
     
@@ -136,7 +191,7 @@ def upload():
     
     # Mapbox-specific parameters
     tileset_id = request.form.get('tileset_id', '').strip()
-    update_mode = request.form.get('update_mode', 'replace').strip()
+    update_mode = request.form.get('update_mode', 'append').strip()
     mapbox_token = request.form.get('mapbox_token', '').strip()
     
     print(f"🔍 Upload mode: {update_mode}, Tileset: {tileset_id}")
@@ -225,32 +280,28 @@ def upload():
                                     # Simplified bounds calculation
                                     coords_list = geom['coordinates']
                                     def flatten_coords(coords):
-                                        """Recursively flatten coordinate arrays."""
+                                        if isinstance(coords[0], (int, float)):
+                                            return [coords]
                                         result = []
                                         for item in coords:
-                                            if isinstance(item, list) and len(item) > 0 and isinstance(item[0], list):
-                                                result.extend(flatten_coords(item))
-                                            else:
-                                                result.append(item)
+                                            result.extend(flatten_coords(item))
                                         return result
                                     
-                                    flat_coords = flatten_coords(coords_list)
-                                    for coord in flat_coords:
+                                    all_coords = flatten_coords(coords_list)
+                                    for coord in all_coords:
                                         if len(coord) >= 2:
                                             airports_data[airport_code]['bounds'][0] = min(airports_data[airport_code]['bounds'][0], coord[0])
                                             airports_data[airport_code]['bounds'][1] = min(airports_data[airport_code]['bounds'][1], coord[1])
                                             airports_data[airport_code]['bounds'][2] = max(airports_data[airport_code]['bounds'][2], coord[0])
                                             airports_data[airport_code]['bounds'][3] = max(airports_data[airport_code]['bounds'][3], coord[1])
                         
-                        # Write back the modified GeoJSON
+                        # Write back
                         with open(geojson_file, 'w') as f:
                             json.dump(data, f)
-                
                 except Exception as e:
-                    print(f"Warning: Could not process {geojson_file}: {e}")
-                    continue
-
-            # Convert airports_data to list format for response
+                    print(f"Warning: Could not preprocess {geojson_file}: {e}")
+            
+            # Calculate center coordinates for each airport
             airports_list = []
             for code, data in airports_data.items():
                 bounds = data['bounds']
@@ -262,18 +313,29 @@ def upload():
                     "bounds": bounds,
                     "feature_count": data['count']
                 })
-
-            # Step 3: Group files by layer type and convert to MBTiles
+            
+            # Sort by airport code
+            airports_list.sort(key=lambda x: x['code'])
+            
+            # Save airports to JSON file for API access
+            # Use tileset_id as filename (sanitized)
+            if output_mode == 'mapbox':
+                airports_filename = f"{tileset_id.replace('.', '_').replace('/', '_')}_airports.json"
+                airports_filepath = DATA_DIR / airports_filename
+                with open(airports_filepath, 'w') as f:
+                    json.dump(airports_list, f, indent=2)
+                print(f"Saved {len(airports_list)} airports to {airports_filepath}")
+            
+            # Step 3: Group GeoJSON files by type (suffix after dash or underscore)
             files_by_type = defaultdict(list)
             
             for geojson_file in geojson_files:
                 filename = geojson_file.stem
                 
-                # Determine layer type from filename
-                if '-' in filename:
-                    layer_type = filename.split('-', 1)[1]
-                elif '_' in filename:
-                    layer_type = filename.split('_', 1)[1]
+                # Extract the type (part after the last dash or underscore)
+                if '-' in filename or '_' in filename:
+                    normalized = filename.replace('_', '-')
+                    layer_type = normalized.split('-')[-1]
                 else:
                     layer_type = filename
                 
@@ -282,29 +344,31 @@ def upload():
             # Track which layers are in this upload
             new_layers = list(files_by_type.keys())
             
+            # Step 3: Process each type/layer
             layer_mbtiles_files = []
             
             for layer_type, files in files_by_type.items():
-                print(f"🔨 Processing layer '{layer_type}' with {len(files)} file(s)")
-                
                 if len(files) == 1:
-                    # Single file - convert directly
+                    # Single file for this type - create MBTiles directly
                     geojson_file = files[0]
                     layer_mbtiles_path = os.path.join(temp_mbtiles_dir, f"{layer_type}.mbtiles")
                     
+                    command = [
+                        'tippecanoe',
+                        '-o', layer_mbtiles_path,
+                        '-l', layer_type,
+                        '-Z10',
+                        '-z16',
+                        '--force',
+                        '--no-feature-limit',
+                        '--no-tile-size-limit',
+                        '--preserve-input-order',
+                        '--drop-densest-as-needed',
+                        str(geojson_file)
+                    ]
+                    
                     subprocess.run(
-                        [
-                            'tippecanoe',
-                            '-o', layer_mbtiles_path,
-                            '--force',
-                            '--no-tile-compression',
-                            '--maximum-zoom=18',
-                            '--minimum-zoom=0',
-                            '--drop-densest-as-needed',
-                            '--extend-zooms-if-still-dropping',
-                            '-l', layer_type,
-                            str(geojson_file)
-                        ],
+                        command,
                         check=True,
                         capture_output=True,
                         text=True
@@ -312,25 +376,31 @@ def upload():
                     
                     layer_mbtiles_files.append(layer_mbtiles_path)
                 else:
-                    # Multiple files for this type - create individual MBTiles then merge
+                    # Multiple files for this type - merge them into one layer
                     individual_mbtiles = []
                     
                     for idx, geojson_file in enumerate(files):
-                        temp_individual_path = os.path.join(temp_mbtiles_dir, f"{layer_type}_{idx}.mbtiles")
+                        temp_individual_path = os.path.join(
+                            temp_mbtiles_dir, 
+                            f"{layer_type}_temp_{idx}.mbtiles"
+                        )
+                        
+                        command = [
+                            'tippecanoe',
+                            '-o', temp_individual_path,
+                            '-l', layer_type,
+                            '-Z10',
+                            '-z16',
+                            '--force',
+                            '--no-feature-limit',
+                            '--no-tile-size-limit',
+                            '--preserve-input-order',
+                            '--drop-densest-as-needed',
+                            str(geojson_file)
+                        ]
                         
                         subprocess.run(
-                            [
-                                'tippecanoe',
-                                '-o', temp_individual_path,
-                                '--force',
-                                '--no-tile-compression',
-                                '--maximum-zoom=18',
-                                '--minimum-zoom=0',
-                                '--drop-densest-as-needed',
-                                '--extend-zooms-if-still-dropping',
-                                '-l', layer_type,
-                                str(geojson_file)
-                            ],
+                            command,
                             check=True,
                             capture_output=True,
                             text=True
@@ -344,7 +414,8 @@ def upload():
                     merge_command = [
                         'tile-join',
                         '-o', layer_mbtiles_path,
-                        '--force'
+                        '--force',
+                        '--no-tile-size-limit'
                     ] + individual_mbtiles
                     
                     subprocess.run(
@@ -360,85 +431,111 @@ def upload():
             if len(layer_mbtiles_files) == 1:
                 shutil.copy(layer_mbtiles_files[0], output_mbtiles_path)
             else:
-                final_merge_command = [
+                final_join_command = [
                     'tile-join',
                     '-o', output_mbtiles_path,
-                    '--force'
+                    '--force',
+                    '--no-tile-size-limit'
                 ] + layer_mbtiles_files
                 
                 subprocess.run(
-                    final_merge_command,
+                    final_join_command,
                     check=True,
                     capture_output=True,
                     text=True
                 )
+            
+            # Step 4.5: Add airport metadata to MBTiles
+            try:
+                conn = sqlite3.connect(output_mbtiles_path)
+                cursor = conn.cursor()
+                
+                # Store airports as custom metadata
+                cursor.execute(
+                    "INSERT OR REPLACE INTO metadata (name, value) VALUES (?, ?)",
+                    ('airports', json.dumps(airports_list))
+                )
+                
+                conn.commit()
+                conn.close()
+                print(f"Added {len(airports_list)} airports to MBTiles metadata")
+            except Exception as e:
+                print(f"Warning: Could not add airport metadata: {e}")
 
-            print(f"✅ Successfully created MBTiles with {len(layer_mbtiles_files)} layers")
-
-            # Handle output based on mode
+            # Step 5: Handle output based on mode
             if output_mode == 'download':
-                # Return the MBTiles file for download
                 return send_file(
                     output_mbtiles_path,
                     as_attachment=True,
                     download_name='converted.mbtiles',
-                    mimetype='application/x-mbtiles'
+                    mimetype='application/vnd.mapbox-vector-tile'
                 )
             
             elif output_mode == 'mapbox':
-                # Upload to Mapbox
-                uploader = Uploader(access_token=mapbox_token)
-                
-                # REPLACE mode only - upload directly, overwriting the tileset
-                with open(output_mbtiles_path, 'rb') as src:
-                    upload_resp = uploader.upload(src, tileset_id)
-
-                if upload_resp.status_code in [200, 201]:
-                    # Save MBTiles for future production pushes
-                    try:
-                        # Ensure storage directory exists
-                        MBTILES_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
-                        storage_path = MBTILES_STORAGE_DIR / f"{tileset_id}.mbtiles"
-                        
-                        # Delete old file if exists (keep only latest)
-                        if storage_path.exists():
-                            storage_path.unlink()
-                            print(f"🗑️  Deleted old MBTiles: {storage_path}")
-                        
-                        # Copy new MBTiles
-                        shutil.copy2(output_mbtiles_path, storage_path)
-                        file_size = storage_path.stat().st_size / (1024 * 1024)  # MB
-                        print(f"✅ Saved MBTiles to {storage_path} ({file_size:.2f} MB)")
-                    except Exception as e:
-                        print(f"⚠️  Failed to save MBTiles: {e}")
-                        import traceback
-                        traceback.print_exc()
+                try:
+                    uploader = Uploader(access_token=mapbox_token)
                     
+                    if update_mode == 'replace':
+                        # REPLACE mode: Upload directly, overwriting the tileset
+                        print(f"📤 Uploading to Mapbox: {tileset_id}")
+                        with open(output_mbtiles_path, 'rb') as src:
+                            upload_resp = uploader.upload(src, tileset_id)
+                        
+                        print(f"📥 Mapbox response: {upload_resp.status_code}")
+                        
+                        if upload_resp.status_code in [200, 201]:
+                            print(f"✅ Mapbox upload successful, now saving MBTiles locally...")
+                            # Save MBTiles for future production pushes
+                            try:
+                                # Ensure storage directory exists
+                                MBTILES_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+                                storage_path = MBTILES_STORAGE_DIR / f"{tileset_id}.mbtiles"
+                                
+                                # Delete old file if exists (keep only latest)
+                                if storage_path.exists():
+                                    storage_path.unlink()
+                                    print(f"🗑️  Deleted old MBTiles: {storage_path}")
+                                
+                                # Copy new MBTiles
+                                shutil.copy2(output_mbtiles_path, storage_path)
+                                file_size = storage_path.stat().st_size / (1024 * 1024)  # MB
+                                print(f"✅ Saved MBTiles to {storage_path} ({file_size:.2f} MB)")
+                            except Exception as e:
+                                print(f"⚠️  Failed to save MBTiles: {e}")
+                                import traceback
+                                traceback.print_exc()
+                            
+                            return jsonify({
+                                "success": True,
+                                "message": "Tileset replaced successfully!",
+                                "tileset_id": tileset_id,
+                                "mapbox_url": f"https://studio.mapbox.com/tilesets/{tileset_id}/",
+                                "mode": "replace",
+                                "layers": new_layers,
+                                "airports": airports_list
+                            })
+                        else:
+                            return jsonify({
+                                "error": "Mapbox API returned an error",
+                                "status_code": upload_resp.status_code,
+                                "details": upload_resp.text
+                            }), 500
+
+                except Exception as e:
                     return jsonify({
-                        "success": True,
-                        "message": "Tileset uploaded successfully (replace mode)!",
-                        "tileset_id": tileset_id,
-                        "mapbox_url": f"https://studio.mapbox.com/tilesets/{tileset_id}/",
-                        "mode": "replace",
-                        "layers": new_layers,
-                        "airports": airports_list
-                    })
-                else:
-                    return jsonify({
-                        "error": "Mapbox API returned an error",
-                        "status_code": upload_resp.status_code,
-                        "details": upload_resp.text
+                        "error": "Failed to process Mapbox upload",
+                        "details": str(e)
                     }), 500
 
         except subprocess.CalledProcessError as e:
-            error_message = e.stderr if e.stderr else str(e)
             return jsonify({
-                "error": "Tippecanoe conversion failed",
-                "details": error_message
+                "error": "Error during tile processing",
+                "command": ' '.join(e.cmd),
+                "stderr": e.stderr,
+                "stdout": e.stdout
             }), 500
+        
         except Exception as e:
-            import traceback
-            traceback.print_exc()
             return jsonify({
                 "error": "An unexpected error occurred",
                 "details": str(e)
@@ -453,27 +550,22 @@ def push_to_production():
     Request JSON:
     {
         "staging_tileset_id": "username.staging-abc123",
-        "production_tileset_id": "username.production-tileset",
-        "mode": "replace"
+        "production_tileset_id": "username.production-tileset"
     }
+    
+    Note: Only replace mode is supported. The entire production tileset will be replaced.
     """
     try:
         data = request.json
         staging_tileset_id = data.get('staging_tileset_id')
         production_tileset_id = data.get('production_tileset_id')
-        mode = data.get('mode', 'replace')
+        mode = 'replace'  # Only replace mode is supported
         mapbox_token = data.get('mapbox_token') or MAPBOX_SECRET_TOKEN
         
         if not staging_tileset_id or not production_tileset_id:
             return jsonify({
                 'success': False,
                 'error': 'Missing required fields: staging_tileset_id, production_tileset_id'
-            }), 400
-        
-        if mode != 'replace':
-            return jsonify({
-                'success': False,
-                'error': 'Invalid mode. Only "replace" is supported'
             }), 400
         
         # Find the MBTiles file for the staging tileset
@@ -489,45 +581,52 @@ def push_to_production():
         # Upload to production
         uploader = Uploader(access_token=mapbox_token)
         
-        # REPLACE mode: Upload directly, overwriting the production tileset
-        with open(mbtiles_path, 'rb') as src:
-            upload_resp = uploader.upload(src, production_tileset_id)
-        
-        if upload_resp.status_code in [200, 201]:
-            # Save MBTiles for production tileset too
-            try:
-                # Ensure storage directory exists
-                MBTILES_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
-                prod_storage_path = MBTILES_STORAGE_DIR / f"{production_tileset_id}.mbtiles"
-                
-                # Delete old file if exists (keep only latest)
-                if prod_storage_path.exists():
-                    prod_storage_path.unlink()
-                    print(f"🗑️  Deleted old production MBTiles: {prod_storage_path}")
-                
-                # Copy MBTiles
-                shutil.copy2(mbtiles_path, prod_storage_path)
-                file_size = prod_storage_path.stat().st_size / (1024 * 1024)  # MB
-                print(f"✅ Saved production MBTiles to {prod_storage_path} ({file_size:.2f} MB)")
-            except Exception as e:
-                print(f"⚠️  Failed to save production MBTiles: {e}")
-                import traceback
-                traceback.print_exc()
+        if mode == 'replace':
+            # REPLACE mode: Upload directly, overwriting the production tileset
+            with open(mbtiles_path, 'rb') as src:
+                upload_resp = uploader.upload(src, production_tileset_id)
             
-            return jsonify({
-                'success': True,
-                'message': f'Successfully pushed to {production_tileset_id} (replace mode)',
-                'tileset_id': production_tileset_id,
-                'mapbox_url': f'https://studio.mapbox.com/tilesets/{production_tileset_id}/',
-                'mode': 'replace'
-            })
+            if upload_resp.status_code in [200, 201]:
+                # Save MBTiles for production tileset too
+                try:
+                    # Ensure storage directory exists
+                    MBTILES_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+                    prod_storage_path = MBTILES_STORAGE_DIR / f"{production_tileset_id}.mbtiles"
+                    
+                    # Delete old file if exists (keep only latest)
+                    if prod_storage_path.exists():
+                        prod_storage_path.unlink()
+                        print(f"🗑️  Deleted old production MBTiles: {prod_storage_path}")
+                    
+                    # Copy MBTiles
+                    shutil.copy2(mbtiles_path, prod_storage_path)
+                    file_size = prod_storage_path.stat().st_size / (1024 * 1024)  # MB
+                    print(f"✅ Saved production MBTiles to {prod_storage_path} ({file_size:.2f} MB)")
+                except Exception as e:
+                    print(f"⚠️  Failed to save production MBTiles: {e}")
+                    import traceback
+                    traceback.print_exc()
+                
+                return jsonify({
+                    'success': True,
+                    'message': f'Successfully pushed to {production_tileset_id} (replace mode)',
+                    'tileset_id': production_tileset_id,
+                    'mapbox_url': f'https://studio.mapbox.com/tilesets/{production_tileset_id}/',
+                    'mode': 'replace'
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': 'Mapbox API returned an error',
+                    'status_code': upload_resp.status_code,
+                    'details': upload_resp.text
+                }), 500
+        
         else:
             return jsonify({
                 'success': False,
-                'error': 'Mapbox API returned an error',
-                'status_code': upload_resp.status_code,
-                'details': upload_resp.text
-            }), 500
+                'error': f'Invalid mode: {mode}. Only "replace" is supported.'
+            }), 400
     
     except Exception as e:
         return jsonify({
@@ -539,3 +638,4 @@ def push_to_production():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port, debug=False)
+
