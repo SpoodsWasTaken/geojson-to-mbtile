@@ -73,6 +73,132 @@ def get_mbtiles_layers(mbtiles_path):
         print(f"Error reading MBTiles layers: {e}")
         return []
 
+def feature_level_deduplicate(existing_mbtiles_path, new_geojson_files, new_airports, work_dir, output_path):
+    """
+    Perform feature-level de-duplication by airport_id.
+    
+    Args:
+        existing_mbtiles_path: Path to existing MBTiles file
+        new_geojson_files: List of paths to new GeoJSON files
+        new_airports: Set of airport_ids in new upload
+        work_dir: Working directory for temporary files
+        output_path: Path for output MBTiles
+    
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        print(f"🔍 Starting feature-level de-duplication for airports: {new_airports}")
+        
+        # Step 1: Decode existing MBTiles to GeoJSON by layer
+        existing_geojson_dir = os.path.join(work_dir, 'existing_geojson')
+        os.makedirs(existing_geojson_dir, exist_ok=True)
+        
+        # Get layers from existing tileset
+        existing_layers = get_mbtiles_layers(existing_mbtiles_path)
+        print(f"📋 Existing layers: {existing_layers}")
+        
+        # Decode each layer to GeoJSON
+        filtered_geojson_files = []
+        for layer in existing_layers:
+            layer_geojson = os.path.join(existing_geojson_dir, f"{layer}.geojson")
+            
+            # Use tippecanoe-decode to extract layer
+            decode_cmd = [
+                'tippecanoe-decode',
+                '-l', layer,
+                existing_mbtiles_path
+            ]
+            
+            with open(layer_geojson, 'w') as f:
+                result = subprocess.run(
+                    decode_cmd,
+                    stdout=f,
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+            
+            if result.returncode != 0:
+                print(f"⚠️  Warning: Failed to decode layer {layer}: {result.stderr}")
+                continue
+            
+            # Step 2: Filter out features with matching airport_ids
+            with open(layer_geojson, 'r') as f:
+                data = json.load(f)
+            
+            original_count = len(data.get('features', []))
+            
+            # Keep only features that DON'T match new airports
+            filtered_features = [
+                feature for feature in data.get('features', [])
+                if feature.get('properties', {}).get('airport_id') not in new_airports
+            ]
+            
+            filtered_count = len(filtered_features)
+            removed_count = original_count - filtered_count
+            
+            if removed_count > 0:
+                print(f"  Layer {layer}: Removed {removed_count} features from {list(new_airports)}")
+            
+            # Save filtered GeoJSON
+            if filtered_features:
+                data['features'] = filtered_features
+                filtered_layer_path = os.path.join(work_dir, f"filtered_{layer}.geojson")
+                with open(filtered_layer_path, 'w') as f:
+                    json.dump(data, f)
+                filtered_geojson_files.append(filtered_layer_path)
+                print(f"  ✅ Saved filtered layer '{layer}' with {filtered_count} features")
+            else:
+                print(f"  ⚠️  Layer '{layer}' has no features after filtering (skipped)")
+        
+        # Step 3: Combine filtered existing + new GeoJSON files
+        all_geojson_files = filtered_geojson_files + new_geojson_files
+        
+        if not all_geojson_files:
+            print("⚠️  No GeoJSON files to process")
+            return False
+        
+        print(f"📦 Creating MBTiles from {len(all_geojson_files)} GeoJSON files:")
+        print(f"  - Filtered existing: {len(filtered_geojson_files)} files")
+        for f in filtered_geojson_files:
+            print(f"    • {os.path.basename(f)}")
+        print(f"  - New upload: {len(new_geojson_files)} files")
+        for f in new_geojson_files:
+            print(f"    • {os.path.basename(f)}")
+        
+        # Step 4: Create MBTiles from combined GeoJSON
+        tippecanoe_cmd = [
+            'tippecanoe',
+            '-o', output_path,
+            '--force',
+            '--no-tile-compression',
+            '-Z0',
+            '-z14',
+            '--drop-densest-as-needed',
+            '--extend-zooms-if-still-dropping'
+        ]
+        
+        # Add all GeoJSON files
+        tippecanoe_cmd.extend(all_geojson_files)
+        
+        result = subprocess.run(
+            tippecanoe_cmd,
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode != 0:
+            print(f"❌ Tippecanoe failed: {result.stderr}")
+            return False
+        
+        print(f"✅ Feature-level de-duplication complete")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Feature-level de-duplication failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
 def get_airports_from_tileset(tileset_id, access_token):
     """Extract unique airport codes from a Mapbox tileset."""
@@ -414,8 +540,7 @@ def upload():
                     merge_command = [
                         'tile-join',
                         '-o', layer_mbtiles_path,
-                        '--force',
-                        '--no-tile-size-limit'
+                        '--force'
                     ] + individual_mbtiles
                     
                     subprocess.run(
@@ -434,8 +559,7 @@ def upload():
                 final_join_command = [
                     'tile-join',
                     '-o', output_mbtiles_path,
-                    '--force',
-                    '--no-tile-size-limit'
+                    '--force'
                 ] + layer_mbtiles_files
                 
                 subprocess.run(
@@ -520,6 +644,134 @@ def upload():
                                 "status_code": upload_resp.status_code,
                                 "details": upload_resp.text
                             }), 500
+                    
+                    elif update_mode == 'append':
+                        # FEATURE-LEVEL SMART APPEND: Remove only matching airport features, keep everything else
+                        existing_mbtiles_path = os.path.join(work_dir, 'existing.mbtiles')
+                        merged_mbtiles_path = os.path.join(work_dir, 'merged.mbtiles')
+                        
+                        download_url = f"https://api.mapbox.com/tilesets/v1/{tileset_id}.mbtiles?access_token={mapbox_token}"
+                        
+                        try:
+                            download_resp = requests.get(download_url, stream=True)
+                            
+                            if download_resp.status_code == 200:
+                                # Save existing tileset
+                                with open(existing_mbtiles_path, 'wb') as f:
+                                    for chunk in download_resp.iter_content(chunk_size=8192):
+                                        f.write(chunk)
+                                
+                                # Get airport IDs from new upload (already extracted earlier)
+                                new_airport_ids = set(airports_list.keys()) if isinstance(airports_list, dict) else set()
+                                
+                                if not new_airport_ids:
+                                    # Fallback: extract from GeoJSON files
+                                    new_airport_ids = set()
+                                    for geojson_file in geojson_files:
+                                        with open(geojson_file, 'r') as f:
+                                            data = json.load(f)
+                                            for feature in data.get('features', []):
+                                                airport_id = feature.get('properties', {}).get('airport_id')
+                                                if airport_id:
+                                                    new_airport_ids.add(airport_id)
+                                
+                                print(f"🏯 Airports in new upload: {new_airport_ids}")
+                                
+                                # Perform feature-level de-duplication
+                                success = feature_level_deduplicate(
+                                    existing_mbtiles_path=existing_mbtiles_path,
+                                    new_geojson_files=geojson_files,
+                                    new_airports=new_airport_ids,
+                                    work_dir=work_dir,
+                                    output_path=merged_mbtiles_path
+                                )
+                                
+                                if not success:
+                                    return jsonify({
+                                        "error": "Feature-level de-duplication failed",
+                                        "details": "Check server logs for more information"
+                                    }), 500
+                                
+                                # Upload merged tileset
+                                with open(merged_mbtiles_path, 'rb') as src:
+                                    upload_resp = uploader.upload(src, tileset_id)
+
+                                if upload_resp.status_code in [200, 201]:
+                                    # Save merged MBTiles for future production pushes
+                                    try:
+                                        # Ensure storage directory exists
+                                        MBTILES_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+                                        storage_path = MBTILES_STORAGE_DIR / f"{tileset_id}.mbtiles"
+                                        
+                                        # Delete old file if exists (keep only latest)
+                                        if storage_path.exists():
+                                            storage_path.unlink()
+                                            print(f"🗑️  Deleted old MBTiles: {storage_path}")
+                                        
+                                        # Copy new MBTiles
+                                        shutil.copy2(merged_mbtiles_path, storage_path)
+                                        file_size = storage_path.stat().st_size / (1024 * 1024)  # MB
+                                        print(f"✅ Saved merged MBTiles to {storage_path} ({file_size:.2f} MB)")
+                                    except Exception as e:
+                                        print(f"⚠️  Failed to save MBTiles: {e}")
+                                        import traceback
+                                        traceback.print_exc()
+                                    
+                                    message = "Feature-level smart append complete!"
+                                    if new_airport_ids:
+                                        message += f" Updated airports: {', '.join(sorted(new_airport_ids))}"
+                                    
+                                    return jsonify({
+                                        "success": True,
+                                        "message": message,
+                                        "tileset_id": tileset_id,
+                                        "mapbox_url": f"https://studio.mapbox.com/tilesets/{tileset_id}/",
+                                        "mode": "append (feature-level smart)",
+                                        "airports_updated": sorted(list(new_airport_ids)),
+                                        "layers": new_layers,
+                                        "airports": airports_list
+                                    })
+                                else:
+                                    return jsonify({
+                                        "error": "Failed to upload merged tileset",
+                                        "status_code": upload_resp.status_code,
+                                        "details": upload_resp.text
+                                    }), 500
+                            
+                            elif download_resp.status_code == 404:
+                                # Tileset doesn't exist yet, upload as new
+                                with open(output_mbtiles_path, 'rb') as src:
+                                    upload_resp = uploader.upload(src, tileset_id)
+
+                                if upload_resp.status_code in [200, 201]:
+                                    return jsonify({
+                                        "success": True,
+                                        "message": "Tileset created successfully (first upload)!",
+                                        "tileset_id": tileset_id,
+                                        "mapbox_url": f"https://studio.mapbox.com/tilesets/{tileset_id}/",
+                                        "mode": "append (new tileset)",
+                                        "layers": new_layers,
+                                        "airports": airports_list
+                                    })
+                                else:
+                                    return jsonify({
+                                        "error": "Failed to create new tileset",
+                                        "status_code": upload_resp.status_code,
+                                        "details": upload_resp.text
+                                    }), 500
+                            
+                            else:
+                                return jsonify({
+                                    "error": "Failed to download existing tileset",
+                                    "status_code": download_resp.status_code,
+                                    "details": download_resp.text
+                                }), 500
+                        
+                        except requests.RequestException as e:
+                            return jsonify({
+                                "error": "Network error while downloading existing tileset",
+                                "details": str(e)
+                            }), 500
 
                 except Exception as e:
                     return jsonify({
@@ -550,22 +802,27 @@ def push_to_production():
     Request JSON:
     {
         "staging_tileset_id": "username.staging-abc123",
-        "production_tileset_id": "username.production-tileset"
+        "production_tileset_id": "username.production-tileset",
+        "mode": "replace" or "append"
     }
-    
-    Note: Only replace mode is supported. The entire production tileset will be replaced.
     """
     try:
         data = request.json
         staging_tileset_id = data.get('staging_tileset_id')
         production_tileset_id = data.get('production_tileset_id')
-        mode = 'replace'  # Only replace mode is supported
+        mode = data.get('mode', 'replace')
         mapbox_token = data.get('mapbox_token') or MAPBOX_SECRET_TOKEN
         
         if not staging_tileset_id or not production_tileset_id:
             return jsonify({
                 'success': False,
                 'error': 'Missing required fields: staging_tileset_id, production_tileset_id'
+            }), 400
+        
+        if mode not in ['replace', 'append']:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid mode. Must be "replace" or "append"'
             }), 400
         
         # Find the MBTiles file for the staging tileset
@@ -622,11 +879,192 @@ def push_to_production():
                     'details': upload_resp.text
                 }), 500
         
-        else:
-            return jsonify({
-                'success': False,
-                'error': f'Invalid mode: {mode}. Only "replace" is supported.'
-            }), 400
+        elif mode == 'append':
+            # APPEND mode: Download existing production, merge, then upload
+            with tempfile.TemporaryDirectory() as work_dir:
+                existing_path = os.path.join(work_dir, 'existing.mbtiles')
+                merged_path = os.path.join(work_dir, 'merged.mbtiles')
+                
+                download_url = f"https://api.mapbox.com/tilesets/v1/{production_tileset_id}.mbtiles?access_token={mapbox_token}"
+                
+                try:
+                    download_resp = requests.get(download_url, stream=True)
+                    
+                    if download_resp.status_code == 200:
+                        # Save existing production tileset
+                        with open(existing_path, 'wb') as f:
+                            for chunk in download_resp.iter_content(chunk_size=8192):
+                                f.write(chunk)
+                        
+                        # FEATURE-LEVEL SMART APPEND: Extract airport IDs from staging MBTiles
+                        # Decode staging MBTiles to get airport IDs
+                        staging_airport_ids = set()
+                        staging_layers = get_mbtiles_layers(str(mbtiles_path))
+                        
+                        for layer in staging_layers:
+                            decode_cmd = [
+                                'tippecanoe-decode',
+                                '-l', layer,
+                                str(mbtiles_path)
+                            ]
+                            
+                            try:
+                                result = subprocess.run(
+                                    decode_cmd,
+                                    capture_output=True,
+                                    text=True
+                                )
+                                
+                                if result.returncode == 0:
+                                    data = json.loads(result.stdout)
+                                    for feature in data.get('features', []):
+                                        airport_id = feature.get('properties', {}).get('airport_id')
+                                        if airport_id:
+                                            staging_airport_ids.add(airport_id)
+                            except Exception as e:
+                                print(f"⚠️  Warning: Failed to decode staging layer {layer}: {e}")
+                        
+                        print(f"🏯 Airports in staging: {staging_airport_ids}")
+                        
+                        # Decode staging MBTiles to GeoJSON files
+                        staging_geojson_dir = os.path.join(work_dir, 'staging_geojson')
+                        os.makedirs(staging_geojson_dir, exist_ok=True)
+                        staging_geojson_files = []
+                        
+                        for layer in staging_layers:
+                            layer_geojson = os.path.join(staging_geojson_dir, f"{layer}.geojson")
+                            decode_cmd = [
+                                'tippecanoe-decode',
+                                '-l', layer,
+                                str(mbtiles_path)
+                            ]
+                            
+                            with open(layer_geojson, 'w') as f:
+                                result = subprocess.run(
+                                    decode_cmd,
+                                    stdout=f,
+                                    stderr=subprocess.PIPE,
+                                    text=True
+                                )
+                            
+                            if result.returncode == 0:
+                                staging_geojson_files.append(layer_geojson)
+                        
+                        # Perform feature-level de-duplication
+                        success = feature_level_deduplicate(
+                            existing_mbtiles_path=existing_path,
+                            new_geojson_files=staging_geojson_files,
+                            new_airports=staging_airport_ids,
+                            work_dir=work_dir,
+                            output_path=merged_path
+                        )
+                        
+                        if not success:
+                            return jsonify({
+                                'success': False,
+                                'error': 'Feature-level de-duplication failed for production push',
+                                'details': 'Check server logs for more information'
+                            }), 500
+                        
+                        # Upload merged tileset
+                        with open(merged_path, 'rb') as src:
+                            upload_resp = uploader.upload(src, production_tileset_id)
+                        
+                        if upload_resp.status_code in [200, 201]:
+                            # Save merged MBTiles for production
+                            try:
+                                # Ensure storage directory exists
+                                MBTILES_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+                                prod_storage_path = MBTILES_STORAGE_DIR / f"{production_tileset_id}.mbtiles"
+                                
+                                # Delete old file if exists (keep only latest)
+                                if prod_storage_path.exists():
+                                    prod_storage_path.unlink()
+                                    print(f"🗑️  Deleted old production MBTiles: {prod_storage_path}")
+                                
+                                # Copy merged MBTiles
+                                shutil.copy2(merged_path, prod_storage_path)
+                                file_size = prod_storage_path.stat().st_size / (1024 * 1024)  # MB
+                                print(f"✅ Saved merged production MBTiles to {prod_storage_path} ({file_size:.2f} MB)")
+                            except Exception as e:
+                                print(f"⚠️  Failed to save production MBTiles: {e}")
+                                import traceback
+                                traceback.print_exc()
+                            
+                            message = f'Successfully pushed to {production_tileset_id} (feature-level append)'
+                            if staging_airport_ids:
+                                message += f" - Updated airports: {', '.join(sorted(staging_airport_ids))}"
+                            
+                            return jsonify({
+                                'success': True,
+                                'message': message,
+                                'tileset_id': production_tileset_id,
+                                'mapbox_url': f'https://studio.mapbox.com/tilesets/{production_tileset_id}/',
+                                'mode': 'append (feature-level smart)',
+                                'airports_updated': sorted(list(staging_airport_ids))
+                            })
+                        else:
+                            return jsonify({
+                                'success': False,
+                                'error': 'Failed to upload merged tileset',
+                                'status_code': upload_resp.status_code,
+                                'details': upload_resp.text
+                            }), 500
+                    
+                    elif download_resp.status_code == 404:
+                        # Production tileset doesn't exist, upload as new
+                        with open(mbtiles_path, 'rb') as src:
+                            upload_resp = uploader.upload(src, production_tileset_id)
+                        
+                        if upload_resp.status_code in [200, 201]:
+                            # Save MBTiles for production
+                            try:
+                                # Ensure storage directory exists
+                                MBTILES_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+                                prod_storage_path = MBTILES_STORAGE_DIR / f"{production_tileset_id}.mbtiles"
+                                
+                                # Delete old file if exists (keep only latest)
+                                if prod_storage_path.exists():
+                                    prod_storage_path.unlink()
+                                    print(f"🗑️  Deleted old production MBTiles: {prod_storage_path}")
+                                
+                                # Copy MBTiles
+                                shutil.copy2(mbtiles_path, prod_storage_path)
+                                file_size = prod_storage_path.stat().st_size / (1024 * 1024)  # MB
+                                print(f"✅ Saved production MBTiles to {prod_storage_path} ({file_size:.2f} MB)")
+                            except Exception as e:
+                                print(f"⚠️  Failed to save production MBTiles: {e}")
+                                import traceback
+                                traceback.print_exc()
+                            
+                            return jsonify({
+                                'success': True,
+                                'message': f'Successfully created {production_tileset_id} (production tileset did not exist)',
+                                'tileset_id': production_tileset_id,
+                                'mapbox_url': f'https://studio.mapbox.com/tilesets/{production_tileset_id}/',
+                                'mode': 'append (new)'
+                            })
+                        else:
+                            return jsonify({
+                                'success': False,
+                                'error': 'Failed to create production tileset',
+                                'status_code': upload_resp.status_code,
+                                'details': upload_resp.text
+                            }), 500
+                    
+                    else:
+                        return jsonify({
+                            'success': False,
+                            'error': 'Failed to download existing production tileset',
+                            'status_code': download_resp.status_code
+                        }), 500
+                
+                except subprocess.CalledProcessError as e:
+                    return jsonify({
+                        'success': False,
+                        'error': 'Failed to merge tilesets',
+                        'details': e.stderr
+                    }), 500
     
     except Exception as e:
         return jsonify({
