@@ -576,14 +576,7 @@
                         <label>Update Mode</label>
                         <div class="radio-group">
                             <div class="radio-option">
-                                <input type="radio" id="update_append" name="update_mode" value="append" checked>
-                                <label for="update_append">
-                                    <strong>Append</strong><br>
-                                    <span class="help-text">Merge with existing data (smart deduplication)</span>
-                                </label>
-                            </div>
-                            <div class="radio-option">
-                                <input type="radio" id="update_replace" name="update_mode" value="replace">
+                                <input type="radio" id="update_replace" name="update_mode" value="replace" checked>
                                 <label for="update_replace">
                                     <strong>Replace</strong><br>
                                     <span class="help-text">Overwrite entire tileset</span>
@@ -813,7 +806,7 @@
             e.preventDefault();
 
             const outputMode = document.querySelector('input[name="output_mode"]:checked').value;
-            const updateMode = document.querySelector('input[name="update_mode"]:checked')?.value || 'append';
+            const updateMode = document.querySelector('input[name="update_mode"]:checked')?.value || 'replace';
 
             // Check authentication for Mapbox operations
             if (outputMode === 'mapbox' && !isAuthenticated) {
