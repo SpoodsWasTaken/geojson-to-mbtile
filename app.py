@@ -543,7 +543,6 @@ def upload():
 
             # Step 4: Merge all layer MBTiles into final output
             if len(layer_mbtiles_files) == 1:
-                import shutil
                 shutil.copy(layer_mbtiles_files[0], output_mbtiles_path)
             else:
                 final_join_command = [
@@ -1005,12 +1004,23 @@ def push_to_production():
                         if upload_resp.status_code in [200, 201]:
                             # Save MBTiles for production
                             try:
+                                # Ensure storage directory exists
+                                MBTILES_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
                                 prod_storage_path = MBTILES_STORAGE_DIR / f"{production_tileset_id}.mbtiles"
-                                import shutil
+                                
+                                # Delete old file if exists (keep only latest)
+                                if prod_storage_path.exists():
+                                    prod_storage_path.unlink()
+                                    print(f"🗑️  Deleted old production MBTiles: {prod_storage_path}")
+                                
+                                # Copy MBTiles
                                 shutil.copy2(mbtiles_path, prod_storage_path)
-                                print(f"✅ Saved production MBTiles to {prod_storage_path}")
+                                file_size = prod_storage_path.stat().st_size / (1024 * 1024)  # MB
+                                print(f"✅ Saved production MBTiles to {prod_storage_path} ({file_size:.2f} MB)")
                             except Exception as e:
                                 print(f"⚠️  Failed to save production MBTiles: {e}")
+                                import traceback
+                                traceback.print_exc()
                             
                             return jsonify({
                                 'success': True,
