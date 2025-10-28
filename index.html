@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoJSON to MBTiles Converter</title>
+    <style>
+        :root {
+            --background: 0 0% 10%;
+            --foreground: 0 0% 98%;
+            --card: 0 0% 14%;
+            --card-foreground: 0 0% 98%;
+            --popover: 0 0% 14%;
+            --popover-foreground: 0 0% 98%;
+            --primary: 0 0% 98%;
+            --primary-foreground: 0 0% 9%;
+            --secondary: 0 0% 20%;
+            --secondary-foreground: 0 0% 98%;
+            --muted: 0 0% 20%;
+            --muted-foreground: 0 0% 63.9%;
+            --accent: 0 0% 20%;
+            --accent-foreground: 0 0% 98%;
+            --destructive: 0 62.8% 30.6%;
+            --destructive-foreground: 0 0% 98%;
+            --border: 0 0% 25%;
+            --input: 0 0% 20%;
+            --ring: 0 0% 83.1%;
+            --success: 142 76% 36%;
+            --warning: 38 92% 50%;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+            background-color: hsl(var(--background));
+            background-image: radial-gradient(circle, hsla(0, 0%, 30%, 0.3) 1px, transparent 1px);
+            background-size: 20px 20px;
+            color: hsl(var(--foreground));
+            min-height: 100vh;
+            padding: 2rem 1rem;
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            max-width: 56rem;
+            margin: 0 auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        h1 {
+            font-size: 1.875rem;
+            font-weight: 600;
+            letter-spacing: -0.025em;
+            color: hsl(var(--foreground));
+        }
+
+        .subtitle {
+            color: hsl(var(--muted-foreground));
+            font-size: 0.875rem;
+        }
+
+        .card {
+            background-color: hsl(var(--card));
+            border: 1px solid hsl(var(--border));
+            border-radius: 0.5rem;
+            padding: 2rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+        }
+
+        .card-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: hsl(var(--foreground));
+        }
+
+        .card-description {
+            color: hsl(var(--muted-foreground));
+            font-size: 0.875rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+            color: hsl(var(--foreground));
+        }
+
+        .help-text {
+            font-size: 0.75rem;
+            color: hsl(var(--muted-foreground));
+            margin-top: 0.25rem;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        input[type="file"],
+        select {
+            width: 100%;
+            padding: 0.625rem 0.75rem;
+            background-color: hsl(var(--background));
+            border: 1px solid hsl(var(--input));
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            color: hsl(var(--foreground));
+            transition: all 0.2s;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: hsl(var(--ring));
+            box-shadow: 0 0 0 3px hsl(var(--ring) / 0.1);
+        }
+
+        .radio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .radio-option {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem;
+            border: 1px solid hsl(var(--border));
+            border-radius: 0.375rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .radio-option:hover {
+            background-color: hsl(var(--secondary) / 0.5);
+        }
+
+        .radio-option input[type="radio"] {
+            width: 1.25rem;
+            height: 1.25rem;
+            margin-right: 0.75rem;
+            cursor: pointer;
+            accent-color: hsl(var(--primary));
+        }
+
+        .radio-option label {
+            margin: 0;
+            cursor: pointer;
+            flex: 1;
+        }
+
+        .conditional-fields {
+            margin-top: 1rem;
+            padding: 1rem;
+            background-color: hsl(var(--secondary) / 0.3);
+            border-radius: 0.375rem;
+            border-left: 3px solid hsl(var(--primary));
+        }
+
+        .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.625rem 1.25rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            border-radius: 0.375rem;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            gap: 0.5rem;
+        }
+
+        .button-primary {
+            background-color: hsl(var(--primary));
+            color: hsl(var(--primary-foreground));
+        }
+
+        .button-primary:hover:not(:disabled) {
+            background-color: hsl(var(--primary) / 0.9);
+        }
+
+        .button-primary:active:not(:disabled) {
+            transform: scale(0.98);
+        }
+
+        .button-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .button-secondary {
+            background-color: hsl(var(--secondary));
+            color: hsl(var(--secondary-foreground));
+        }
+
+        .button-secondary:hover {
+            background-color: hsl(var(--secondary) / 0.8);
+        }
+
+        .button-destructive {
+            background-color: hsl(var(--destructive));
+            color: hsl(var(--destructive-foreground));
+        }
+
+        .button-destructive:hover {
+            background-color: hsl(var(--destructive) / 0.9);
+        }
+
+        .button-group {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .section-divider {
+            height: 1px;
+            background-color: hsl(var(--border));
+            margin: 2rem 0;
+        }
+
+        .protected-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.25rem 0.5rem;
+            background-color: hsl(var(--warning) / 0.1);
+            border: 1px solid hsl(var(--warning) / 0.3);
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            color: hsl(var(--warning));
+            font-weight: 500;
+        }
+
+        .tileset-info {
+            background-color: hsl(var(--secondary) / 0.3);
+            border: 1px solid hsl(var(--border));
+            border-radius: 0.375rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .tileset-info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid hsl(var(--border));
+        }
+
+        .tileset-info-row:last-child {
+            border-bottom: none;
+        }
+
+        .tileset-info-label {
+            font-weight: 500;
+            font-size: 0.875rem;
+            color: hsl(var(--muted-foreground));
+        }
+
+        .tileset-info-value {
+            font-size: 0.875rem;
+            color: hsl(var(--foreground));
+            font-family: monospace;
+        }
+
+        /* Toast Notifications */
+        .toast-container {
+            position: fixed;
+            bottom: 1rem;
+            right: 1rem;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            max-width: 24rem;
+        }
+
+        .toast {
+            background-color: hsl(var(--card));
+            border: 1px solid hsl(var(--border));
+            border-radius: 0.5rem;
+            padding: 1rem;
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .toast-success {
+            border-left: 4px solid hsl(var(--success));
+        }
+
+        .toast-error {
+            border-left: 4px solid hsl(var(--destructive));
+        }
+
+        .toast-info {
+            border-left: 4px solid hsl(var(--primary));
+        }
+
+        .toast-warning {
+            border-left: 4px solid hsl(var(--warning));
+        }
+
+        .toast-title {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+            font-size: 0.875rem;
+        }
+
+        .toast-message {
+            font-size: 0.875rem;
+            color: hsl(var(--muted-foreground));
+        }
+
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgb(0 0 0 / 0.8);
+            z-index: 9998;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background-color: hsl(var(--card));
+            border: 1px solid hsl(var(--border));
+            border-radius: 0.5rem;
+            padding: 2rem;
+            max-width: 28rem;
+            width: 100%;
+            box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+        }
+
+        .modal-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+
+        .modal-description {
+            color: hsl(var(--muted-foreground));
+            font-size: 0.875rem;
+            margin-bottom: 1.5rem;
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            display: inline-block;
+            width: 1rem;
+            height: 1rem;
+            border: 2px solid hsl(var(--border));
+            border-top-color: hsl(var(--primary));
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Loading Overlay */
+        .loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgb(0 0 0 / 0.9);
+            z-index: 10000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .loading-overlay.active {
+            display: flex;
+        }
+
+        .loading-content {
+            text-align: center;
+            max-width: 24rem;
+        }
+
+        .loading-spinner {
+            width: 4rem;
+            height: 4rem;
+            border: 4px solid hsl(var(--border));
+            border-top-color: hsl(var(--primary));
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 1.5rem;
+        }
+
+        .loading-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .loading-message {
+            color: hsl(var(--muted-foreground));
+            font-size: 0.875rem;
+            margin-bottom: 1rem;
+        }
+
+        .loading-progress {
+            background-color: hsl(var(--secondary));
+            border-radius: 9999px;
+            height: 0.5rem;
+            overflow: hidden;
+            margin-bottom: 0.5rem;
+        }
+
+        .loading-progress-bar {
+            height: 100%;
+            background-color: hsl(var(--primary));
+            transition: width 0.3s ease;
+        }
+
+        .loading-steps {
+            text-align: left;
+            margin-top: 1.5rem;
+            font-size: 0.875rem;
+        }
+
+        .loading-step {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0;
+            color: hsl(var(--muted-foreground));
+        }
+
+        .loading-step.active {
+            color: hsl(var(--foreground));
+        }
+
+        .loading-step.complete {
+            color: hsl(var(--success));
+        }
+
+        .loading-step-icon {
+            width: 1.25rem;
+            height: 1.25rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            body {
+                padding: 1rem 0.5rem;
+            }
+
+            .card {
+                padding: 1.5rem;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+            }
+
+            .button-group {
+                flex-direction: column;
+            }
+
+            .button {
+                width: 100%;
+            }
+
+            .toast-container {
+                left: 1rem;
+                right: 1rem;
+                max-width: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>GeoJSON to MBTiles</h1>
+                <p class="subtitle">Convert and manage your vector tilesets</p>
+            </div>
+            <div id="auth-status"></div>
+        </div>
+
+        <!-- Upload Card -->
+        <div class="card">
+            <div class="card-title">Upload & Convert</div>
+            <div class="card-description">Convert GeoJSON files to MBTiles format</div>
+
+            <form id="upload-form" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="file">Select ZIP File</label>
+                    <input type="file" id="file" name="file" accept=".zip" required>
+                    <p class="help-text">Upload a ZIP file containing GeoJSON files named as: airport-type.geojson (e.g., PGD-rwy.geojson)</p>
+                </div>
+
+                <div class="form-group">
+                    <label>Output Mode</label>
+                    <div class="radio-group">
+                        <div class="radio-option">
+                            <input type="radio" id="mode_download" name="output_mode" value="download" checked>
+                            <label for="mode_download">
+                                <strong>Download MBTiles</strong><br>
+                                <span class="help-text">Save the converted file to your computer</span>
+                            </label>
+                        </div>
+                        <div class="radio-option">
+                            <input type="radio" id="mode_mapbox" name="output_mode" value="mapbox">
+                            <label for="mode_mapbox">
+                                <strong>Upload to Mapbox</strong>
+                                <span class="protected-badge">🔒 Protected</span><br>
+                                <span class="help-text">Upload directly to your Mapbox tileset</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="mapbox-fields" class="conditional-fields" style="display: none;">
+                    <div class="form-group">
+                        <label for="tileset_id">Tileset ID</label>
+                        <input type="text" id="tileset_id" name="tileset_id" placeholder="username.tileset-name">
+                        <p class="help-text">Format: username.tileset-name</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="mapbox_token">Mapbox Secret Token</label>
+                        <input type="password" id="mapbox_token" name="mapbox_token" placeholder="sk.xxx...">
+                        <p class="help-text">Requires: uploads:write, tilesets:write, tilesets:read</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Update Mode</label>
+                        <div class="radio-group">
+                            <div class="radio-option">
+                                <input type="radio" id="update_replace" name="update_mode" value="replace" checked>
+                                <label for="update_replace">
+                                    <strong>Replace</strong><br>
+                                    <span class="help-text">Overwrite entire tileset</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="button-group">
+                    <button type="submit" class="button button-primary" id="submit-btn">
+                        Convert & Process
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Mapbox Tools Card -->
+        <div class="card" id="mapbox-tools-card">
+            <div class="card-title">
+                Mapbox Tools
+                <span class="protected-badge">🔒 Protected</span>
+            </div>
+            <div class="card-description">View and manage your tilesets</div>
+
+            <div class="tileset-info" id="tileset-info" style="display: none;">
+                <div class="tileset-info-row">
+                    <span class="tileset-info-label">Current Tileset</span>
+                    <span class="tileset-info-value" id="current-tileset-id">-</span>
+                </div>
+                <div class="tileset-info-row">
+                    <span class="tileset-info-label">Last Updated</span>
+                    <span class="tileset-info-value" id="tileset-last-updated">-</span>
+                </div>
+                <div class="tileset-info-row">
+                    <span class="tileset-info-label">Layers</span>
+                    <span class="tileset-info-value" id="tileset-layers">-</span>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button class="button button-primary" id="view-tileset-btn">
+                    View Tileset
+                </button>
+                <button class="button button-secondary" id="configure-tileset-btn">
+                    Configure Tileset
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Authentication Modal -->
+    <div class="modal-overlay" id="auth-modal">
+        <div class="modal">
+            <div class="modal-title">Authentication Required</div>
+            <div class="modal-description">
+                Please enter your passcode to access Mapbox features.
+            </div>
+            <form id="auth-form">
+                <div class="form-group">
+                    <label for="passcode">Passcode</label>
+                    <input type="password" id="passcode" name="passcode" required autofocus>
+                </div>
+                <div class="button-group">
+                    <button type="button" class="button button-secondary" onclick="closeAuthModal()">Cancel</button>
+                    <button type="submit" class="button button-primary">Authenticate</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Configure Tileset Modal -->
+    <div class="modal-overlay" id="configure-modal">
+        <div class="modal">
+            <div class="modal-title">Configure Tileset</div>
+            <div class="modal-description">
+                Enter your staging tileset ID to view and manage.
+            </div>
+            <form id="configure-form">
+                <div class="form-group">
+                    <label for="config-tileset-id">Staging Tileset ID</label>
+                    <input type="text" id="config-tileset-id" placeholder="username.tileset-name" required>
+                    <p class="help-text">This will be saved for future use</p>
+                </div>
+                <div class="button-group">
+                    <button type="button" class="button button-secondary" onclick="closeConfigureModal()">Cancel</button>
+                    <button type="submit" class="button button-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <div class="loading-title" id="loading-title">Processing...</div>
+            <div class="loading-message" id="loading-message">Please wait</div>
+            <div class="loading-progress">
+                <div class="loading-progress-bar" id="loading-progress-bar" style="width: 0%"></div>
+            </div>
+            <div class="loading-steps" id="loading-steps"></div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script>
+        // State management
+        let isAuthenticated = false;
+        let pendingAction = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            checkAuthentication();
+            loadSavedData();
+            setupEventListeners();
+        });
+
+        // Check authentication status
+        async function checkAuthentication() {
+            try {
+                const response = await fetch('/auth/check');
+                const data = await response.json();
+                isAuthenticated = data.authenticated;
+                updateAuthUI();
+            } catch (error) {
+                console.error('Auth check failed:', error);
+                isAuthenticated = false;
+                updateAuthUI();
+            }
+        }
+
+        // Update auth UI
+        function updateAuthUI() {
+            const authStatus = document.getElementById('auth-status');
+            if (isAuthenticated) {
+                authStatus.innerHTML = `
+                    <button class="button button-secondary" onclick="logout()">
+                        Logout
+                    </button>
+                `;
+            } else {
+                authStatus.innerHTML = '';
+            }
+        }
+
+        // Load saved data from localStorage or server defaults
+        function loadSavedData() {
+            const tilesetId = localStorage.getItem('mapbox_tileset_id') || '{{ default_staging_tileset }}';
+            const secretToken = localStorage.getItem('mapbox_secret_token') || '{{ mapbox_secret_token }}';
+
+            if (tilesetId) {
+                document.getElementById('tileset_id').value = tilesetId;
+                document.getElementById('config-tileset-id').value = tilesetId;
+                document.getElementById('current-tileset-id').textContent = tilesetId;
+                document.getElementById('tileset-info').style.display = 'block';
+                updateTilesetInfo(tilesetId);
+            }
+
+            if (secretToken) {
+                document.getElementById('mapbox_token').value = secretToken;
+            }
+        }
+
+        // Update tileset info display
+        function updateTilesetInfo(tilesetId) {
+            // This would fetch real data from Mapbox API
+            // For now, just show the ID
+            document.getElementById('tileset-last-updated').textContent = 'Recently';
+            document.getElementById('tileset-layers').textContent = 'Multiple layers';
+        }
+
+        // Setup event listeners
+        function setupEventListeners() {
+            // Output mode toggle
+            document.querySelectorAll('input[name="output_mode"]').forEach(radio => {
+                radio.addEventListener('change', function() {
+                    const mapboxFields = document.getElementById('mapbox-fields');
+                    if (this.value === 'mapbox') {
+                        mapboxFields.style.display = 'block';
+                    } else {
+                        mapboxFields.style.display = 'none';
+                    }
+                });
+            });
+
+            // Upload form
+            document.getElementById('upload-form').addEventListener('submit', handleUpload);
+
+            // Auth form
+            document.getElementById('auth-form').addEventListener('submit', handleAuth);
+
+            // Configure form
+            document.getElementById('configure-form').addEventListener('submit', handleConfigure);
+
+            // View tileset button
+            document.getElementById('view-tileset-btn').addEventListener('click', handleViewTileset);
+
+            // Configure tileset button
+            document.getElementById('configure-tileset-btn').addEventListener('click', function() {
+                if (!isAuthenticated) {
+                    pendingAction = 'configure';
+                    showAuthModal();
+                } else {
+                    showConfigureModal();
+                }
+            });
+
+            // Save tileset ID and token on change
+            document.getElementById('tileset_id').addEventListener('change', function() {
+                if (this.value) {
+                    localStorage.setItem('mapbox_tileset_id', this.value);
+                }
+            });
+
+            document.getElementById('mapbox_token').addEventListener('change', function() {
+                if (this.value) {
+                    localStorage.setItem('mapbox_secret_token', this.value);
+                }
+            });
+        }
+
+        // Handle upload
+        async function handleUpload(e) {
+            e.preventDefault();
+
+            const outputMode = document.querySelector('input[name="output_mode"]:checked').value;
+            const updateMode = document.querySelector('input[name="update_mode"]:checked')?.value || 'append';
+
+            // Check authentication for Mapbox operations
+            if (outputMode === 'mapbox' && !isAuthenticated) {
+                pendingAction = 'upload';
+                showAuthModal();
+                return;
+            }
+
+            const formData = new FormData(e.target);
+
+            // Save values to localStorage
+            const tilesetId = formData.get('tileset_id');
+            const mapboxToken = formData.get('mapbox_token');
+            if (tilesetId) localStorage.setItem('mapbox_tileset_id', tilesetId);
+            if (mapboxToken) localStorage.setItem('mapbox_secret_token', mapboxToken);
+
+            showLoading('Converting GeoJSON files...', 'This may take a few minutes');
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Upload failed');
+                }
+
+                if (outputMode === 'download') {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'converted.mbtiles';
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    hideLoading();
+                    showToast('Success', 'MBTiles file downloaded successfully!', 'success');
+                } else {
+                    const result = await response.json();
+                    hideLoading();
+                    showMapboxSuccess(result, tilesetId, updateMode);
+                }
+            } catch (error) {
+                hideLoading();
+                showToast('Error', error.message, 'error');
+            }
+        }
+
+        // Show Mapbox upload success screen
+        function showMapboxSuccess(result, tilesetId, updateMode) {
+            const successHTML = `
+                <div style="text-align: center; padding: 2rem;">
+                    <div style="font-size: 3rem; color: hsl(var(--success)); margin-bottom: 1rem;">✓</div>
+                    <h2 style="font-size: 1.5rem; margin-bottom: 0.5rem;">Upload Complete!</h2>
+                    <p style="color: hsl(var(--muted-foreground)); margin-bottom: 2rem;">
+                        ${result.message || 'Tileset uploaded successfully!'}
+                    </p>
+                    
+                    <div style="background: hsl(var(--muted)); padding: 1.5rem; border-radius: 0.5rem; margin-bottom: 2rem; text-align: left;">
+                        <div style="display: grid; gap: 0.75rem; font-size: 0.875rem;">
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="color: hsl(var(--muted-foreground));">Output Mode:</span>
+                                <span style="font-weight: 500;">Mapbox Upload</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="color: hsl(var(--muted-foreground));">Update Mode:</span>
+                                <span style="font-weight: 500; text-transform: capitalize;">${updateMode}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="color: hsl(var(--muted-foreground));">Tileset ID:</span>
+                                <span style="font-weight: 500;">${tilesetId}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+                        <button onclick="window.location.href='/viewer?tileset_id=${tilesetId}'" 
+                                style="padding: 0.75rem 1.5rem; background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); border: none; border-radius: 0.375rem; font-size: 0.875rem; font-weight: 500; cursor: pointer;">
+                            View Tileset
+                        </button>
+                        <button onclick="closeMapboxSuccess()" 
+                                style="padding: 0.75rem 1.5rem; background: hsl(var(--secondary)); color: hsl(var(--secondary-foreground)); border: none; border-radius: 0.375rem; font-size: 0.875rem; font-weight: 500; cursor: pointer;">
+                            Convert Another File
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            // Show in loading overlay
+            const loadingOverlay = document.getElementById('loading-overlay');
+            loadingOverlay.innerHTML = successHTML;
+            loadingOverlay.style.display = 'flex';
+        }
+        
+        function closeMapboxSuccess() {
+            document.getElementById('loading-overlay').style.display = 'none';
+            document.getElementById('loading-overlay').innerHTML = '<div class="spinner"></div><div id="loading-message" style="margin-top: 1rem; color: hsl(var(--muted-foreground));">Processing...</div>';
+        }
+
+        // Handle authentication
+        async function handleAuth(e) {
+            e.preventDefault();
+            const passcode = document.getElementById('passcode').value;
+
+            try {
+                const response = await fetch('/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ passcode })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    isAuthenticated = true;
+                    updateAuthUI();
+                    closeAuthModal();
+                    showToast('Success', 'Authentication successful!', 'success');
+
+                    // Execute pending action
+                    if (pendingAction === 'upload') {
+                        document.getElementById('upload-form').dispatchEvent(new Event('submit'));
+                    } else if (pendingAction === 'configure') {
+                        showConfigureModal();
+                    } else if (pendingAction === 'view') {
+                        viewTileset();
+                    }
+                    pendingAction = null;
+                } else {
+                    showToast('Error', data.message || 'Invalid passcode', 'error');
+                }
+            } catch (error) {
+                showToast('Error', 'Authentication failed', 'error');
+            }
+        }
+
+        // Handle configure
+        function handleConfigure(e) {
+            e.preventDefault();
+            const tilesetId = document.getElementById('config-tileset-id').value;
+            
+            localStorage.setItem('mapbox_tileset_id', tilesetId);
+            document.getElementById('tileset_id').value = tilesetId;
+            document.getElementById('current-tileset-id').textContent = tilesetId;
+            document.getElementById('tileset-info').style.display = 'block';
+            
+            closeConfigureModal();
+            showToast('Success', 'Tileset configured successfully!', 'success');
+            updateTilesetInfo(tilesetId);
+        }
+
+        // Handle view tileset
+        async function handleViewTileset() {
+            if (!isAuthenticated) {
+                pendingAction = 'view';
+                showAuthModal();
+                return;
+            }
+
+            viewTileset();
+        }
+
+        function viewTileset() {
+            const tilesetId = localStorage.getItem('mapbox_tileset_id');
+            
+            if (!tilesetId) {
+                showConfigureModal();
+                return;
+            }
+
+            window.location.href = `/viewer?tileset_id=${tilesetId}`;
+        }
+
+        // Logout
+        async function logout() {
+            try {
+                await fetch('/auth/logout', { method: 'POST' });
+                isAuthenticated = false;
+                updateAuthUI();
+                showToast('Success', 'Logged out successfully', 'success');
+            } catch (error) {
+                showToast('Error', 'Logout failed', 'error');
+            }
+        }
+
+        // Modal functions
+        function showAuthModal() {
+            document.getElementById('auth-modal').classList.add('active');
+            document.getElementById('passcode').focus();
+        }
+
+        function closeAuthModal() {
+            document.getElementById('auth-modal').classList.remove('active');
+            document.getElementById('passcode').value = '';
+            pendingAction = null;
+        }
+
+        function showConfigureModal() {
+            document.getElementById('configure-modal').classList.add('active');
+            document.getElementById('config-tileset-id').focus();
+        }
+
+        function closeConfigureModal() {
+            document.getElementById('configure-modal').classList.remove('active');
+        }
+
+        // Loading functions
+        function showLoading(title, message) {
+            document.getElementById('loading-title').textContent = title;
+            document.getElementById('loading-message').textContent = message;
+            document.getElementById('loading-overlay').classList.add('active');
+            
+            // Simulate progress
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += Math.random() * 15;
+                if (progress > 90) progress = 90;
+                document.getElementById('loading-progress-bar').style.width = progress + '%';
+            }, 500);
+            
+            // Store interval for cleanup
+            window.loadingInterval = interval;
+        }
+
+        function hideLoading() {
+            if (window.loadingInterval) {
+                clearInterval(window.loadingInterval);
+            }
+            document.getElementById('loading-progress-bar').style.width = '100%';
+            setTimeout(() => {
+                document.getElementById('loading-overlay').classList.remove('active');
+                document.getElementById('loading-progress-bar').style.width = '0%';
+            }, 300);
+        }
+
+        // Toast functions
+        function showToast(title, message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.innerHTML = `
+                <div class="toast-title">${title}</div>
+                <div class="toast-message">${message}</div>
+            `;
+            
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
+
