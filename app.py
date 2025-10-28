@@ -167,31 +167,73 @@ def feature_level_deduplicate(existing_mbtiles_path, new_geojson_files, new_airp
             print(f"    • {os.path.basename(f)}")
         
         # Step 4: Create MBTiles from combined GeoJSON
-        tippecanoe_cmd = [
-            'tippecanoe',
-            '-o', output_path,
-            '--force',
-            '--no-tile-compression',
-            '-Z0',
-            '-z14',
-            '--drop-densest-as-needed',
-            '--extend-zooms-if-still-dropping'
-        ]
+        # We need to create separate MBTiles for each layer, then merge them
+        # This ensures layers are preserved correctly
         
-        # Add all GeoJSON files
-        tippecanoe_cmd.extend(all_geojson_files)
+        layer_mbtiles = []
+        temp_layer_dir = os.path.join(work_dir, 'layer_mbtiles')
+        os.makedirs(temp_layer_dir, exist_ok=True)
         
-        result = subprocess.run(
-            tippecanoe_cmd,
-            capture_output=True,
-            text=True
-        )
+        # Group files by layer name
+        files_by_layer = defaultdict(list)
+        for f in all_geojson_files:
+            basename = os.path.basename(f)
+            # Extract layer name from filename (e.g., 'filtered_rwy.geojson' -> 'rwy')
+            if basename.startswith('filtered_'):
+                layer_name = basename.replace('filtered_', '').replace('.geojson', '')
+            else:
+                # For new files like 'pgd_rwy.geojson' or 'E16-rwy.geojson'
+                layer_name = basename.split('_')[-1].split('-')[-1].replace('.geojson', '')
+            files_by_layer[layer_name].append(f)
         
-        if result.returncode != 0:
-            print(f"❌ Tippecanoe failed: {result.stderr}")
-            return False
+        print(f"📋 Layers to process: {list(files_by_layer.keys())}")
         
-        print(f"✅ Feature-level de-duplication complete")
+        # Create MBTiles for each layer
+        for layer_name, layer_files in files_by_layer.items():
+            layer_mbtiles_path = os.path.join(temp_layer_dir, f"{layer_name}.mbtiles")
+            
+            tippecanoe_cmd = [
+                'tippecanoe',
+                '-o', layer_mbtiles_path,
+                '-l', layer_name,  # ← CRITICAL: Specify layer name!
+                '--force',
+                '--no-tile-compression',
+                '-Z0',
+                '-z14',
+                '--drop-densest-as-needed',
+                '--extend-zooms-if-still-dropping'
+            ]
+            tippecanoe_cmd.extend(layer_files)
+            
+            result = subprocess.run(
+                tippecanoe_cmd,
+                capture_output=True,
+                text=True
+            )
+            
+            if result.returncode != 0:
+                print(f"❌ Failed to create MBTiles for layer {layer_name}: {result.stderr}")
+                continue
+            
+            layer_mbtiles.append(layer_mbtiles_path)
+            print(f"  ✅ Created MBTiles for layer '{layer_name}' from {len(layer_files)} files")
+        
+        # Merge all layer MBTiles into final output
+        if len(layer_mbtiles) == 1:
+            shutil.copy(layer_mbtiles[0], output_path)
+        else:
+            merge_cmd = ['tile-join', '-o', output_path, '--force'] + layer_mbtiles
+            result = subprocess.run(
+                merge_cmd,
+                capture_output=True,
+                text=True
+            )
+            
+            if result.returncode != 0:
+                print(f"❌ Failed to merge layer MBTiles: {result.stderr}")
+                return False
+        
+        print(f"✅ Feature-level de-duplication complete - {len(layer_mbtiles)} layers merged")
         return True
         
     except Exception as e:
