@@ -311,6 +311,8 @@ def upload():
     update_mode = request.form.get('update_mode', 'append').strip()
     mapbox_token = request.form.get('mapbox_token', '').strip()
     
+    print(f"🔍 Upload mode: {update_mode}, Tileset: {tileset_id}")
+    
     # Validate Mapbox parameters if needed
     if output_mode == 'mapbox':
         # Require authentication for Mapbox operations
@@ -590,10 +592,14 @@ def upload():
                     
                     if update_mode == 'replace':
                         # REPLACE mode: Upload directly, overwriting the tileset
+                        print(f"📤 Uploading to Mapbox: {tileset_id}")
                         with open(output_mbtiles_path, 'rb') as src:
                             upload_resp = uploader.upload(src, tileset_id)
-
+                        
+                        print(f"📥 Mapbox response: {upload_resp.status_code}")
+                        
                         if upload_resp.status_code in [200, 201]:
+                            print(f"✅ Mapbox upload successful, now saving MBTiles locally...")
                             # Save MBTiles for future production pushes
                             try:
                                 # Ensure storage directory exists
