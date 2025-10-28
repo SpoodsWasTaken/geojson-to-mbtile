@@ -147,6 +147,9 @@ def feature_level_deduplicate(existing_mbtiles_path, new_geojson_files, new_airp
                 with open(filtered_layer_path, 'w') as f:
                     json.dump(data, f)
                 filtered_geojson_files.append(filtered_layer_path)
+                print(f"  ✅ Saved filtered layer '{layer}' with {filtered_count} features")
+            else:
+                print(f"  ⚠️  Layer '{layer}' has no features after filtering (skipped)")
         
         # Step 3: Combine filtered existing + new GeoJSON files
         all_geojson_files = filtered_geojson_files + new_geojson_files
@@ -155,7 +158,13 @@ def feature_level_deduplicate(existing_mbtiles_path, new_geojson_files, new_airp
             print("⚠️  No GeoJSON files to process")
             return False
         
-        print(f"📦 Creating MBTiles from {len(all_geojson_files)} GeoJSON files")
+        print(f"📦 Creating MBTiles from {len(all_geojson_files)} GeoJSON files:")
+        print(f"  - Filtered existing: {len(filtered_geojson_files)} files")
+        for f in filtered_geojson_files:
+            print(f"    • {os.path.basename(f)}")
+        print(f"  - New upload: {len(new_geojson_files)} files")
+        for f in new_geojson_files:
+            print(f"    • {os.path.basename(f)}")
         
         # Step 4: Create MBTiles from combined GeoJSON
         tippecanoe_cmd = [
